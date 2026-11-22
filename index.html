@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>fanal · motor de animación para web, macos y windows</title>
+<meta name="description" content="fanal es un motor de animación en canvas 2d y webgl2: cámara, transiciones, partículas, shaders, dibujo a trazos, personajes por partes y sonido sintetizado. corre en el navegador y como app de escritorio en macos y windows.">
+<meta name="theme-color" content="#0a0705">
+<meta property="og:title" content="fanal">
+<meta property="og:description" content="motor de animación para web, macos y windows.">
+<meta property="og:image" content="docs/planeta.jpg">
+<link rel="stylesheet" href="css/portada.css">
+</head>
+<body>
+
+<header class="hero">
+  <img class="hero-img" src="docs/planeta.jpg" alt="" width="1600" height="900">
+  <div class="hero-txt">
+    <p class="etq">motor de animación · v1.0.0</p>
+    <h1>fanal</h1>
+    <p class="bajada">animaciones largas en una sola toma, escritas como datos. canvas 2d y webgl2, sin build, sin dependencias. corre en el navegador y se instala como app de escritorio en macos y windows.</p>
+    <nav class="acciones" aria-label="acciones principales">
+      <a class="btn btn-lleno" href="#descargar">descargar</a>
+      <a class="btn" href="teaser.html">ver el teaser</a>
+      <a class="btn" href="https://github.com/kisnner26/fanal">código</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<section class="bloque" aria-labelledby="t-modulos">
+  <p class="etq">01</p>
+  <h2 id="t-modulos">módulos</h2>
+  <ul class="modulos">
+    <li><code>timeline</code><span>secuenciador de tomas, easing y keyframes</span></li>
+    <li><code>camera</code><span>dolly, paneo, push-in, parallax y profundidad de campo</span></li>
+    <li><code>transitions</code><span>fundidos, iris, match cuts y cruces de luz</span></li>
+    <li><code>particles</code><span>luciérnagas, polillas, polvo y redes de neuronas</span></li>
+    <li><code>strokes</code><span>dibujos a trazos con aguada y morph entre ellos</span></li>
+    <li><code>rig</code><span>personajes por partes con respiración, parpadeo y pelo con física</span></li>
+    <li><code>gl · shaders</code><span>pases webgl2 registrables: agujero negro lensado, julia, cielo, océano</span></li>
+    <li><code>audio</code><span>grafo webaudio por capas con compresor, reverb y automatización</span></li>
+    <li><code>player</code><span>une todo y reproduce una escena</span></li>
+  </ul>
+</section>
+
+<section class="bloque" aria-labelledby="t-escena">
+  <p class="etq">02</p>
+  <h2 id="t-escena">una escena son datos</h2>
+  <pre><code>// scenes/mi-escena.js
+import { fireflies } from '../engine/particles.js';
+
+export default {
+  name: 'mi-escena',
+  shots: [{
+    id: 'luces', dur: 10,
+    camera: [{ t: 0, z: 1 }, { t: 10, z: 1.3 }],
+    draw(S, env) {
+      env.ctx.fillStyle = '#0a0705';
+      env.ctx.fillRect(0, 0, S.w, S.h);
+      fireflies(env.ctx, S.view, S.ta, { n: 20 });
+    },
+  }],
+};</code></pre>
+  <p class="nota">se abre con <code>teaser.html?escena=mi-escena</code>. hay una escena mínima funcionando en <a href="ejemplo.html">ejemplo.html</a> y la api completa en <a href="https://github.com/kisnner26/fanal/blob/main/engine/README.md">engine/README.md</a>.</p>
+</section>
+
+<section class="bloque" id="descargar" aria-labelledby="t-descargar">
+  <p class="etq">03</p>
+  <h2 id="t-descargar">escritorio</h2>
+  <p class="nota">reproductor hecho con electron. pantalla completa con f11 o cmd/ctrl+f, esc para salir.</p>
+  <div class="descargas">
+    <a class="dl" href="https://github.com/kisnner26/fanal/releases/latest/download/fanal-1.0.0-mac-arm64.dmg"><span class="so">macos</span><span class="arq">apple silicon · dmg</span></a>
+    <a class="dl" href="https://github.com/kisnner26/fanal/releases/latest/download/fanal-1.0.0-mac-x64.dmg"><span class="so">macos</span><span class="arq">intel · dmg</span></a>
+    <a class="dl" href="https://github.com/kisnner26/fanal/releases/latest/download/fanal-1.0.0-win-x64.zip"><span class="so">windows</span><span class="arq">x64 · zip portable</span></a>
+  </div>
+  <p class="nota">los ejecutables no están firmados. en macos, la primera vez: clic derecho sobre la app y abrir. en windows, si aparece smartscreen: más información y ejecutar de todas formas.</p>
+</section>
+
+<section class="bloque teaser" aria-labelledby="t-teaser">
+  <p class="etq">04</p>
+  <h2 id="t-teaser">teaser: constancia</h2>
+  <p class="nota">una animación sin texto de unos tres minutos, hecha solo con la api del motor: una luciérnaga, una mente, un rostro a lo largo de la vida, un ojo, un agujero negro y un amanecer lejano. es una muestra de lo que fanal puede hacer, no el proyecto.</p>
+  <a class="teaser-img" href="teaser.html"><img src="docs/mente.jpg" alt="red de neuronas encendidas, fotograma del teaser" width="1600" height="900" loading="lazy"><span class="btn btn-lleno">reproducir</span></a>
+</section>
+
+</main>
+
+<footer class="pie">
+  <span>fanal · kisnner · 2026</span>
+  <a href="https://github.com/kisnner26/fanal">github.com/kisnner26/fanal</a>
+</footer>
+
+</body>
+</html>
