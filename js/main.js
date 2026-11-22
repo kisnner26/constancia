@@ -1,8 +1,10 @@
-// punto de entrada de constancia: monta el reproductor del motor con la escena.
+// punto de entrada: monta el reproductor del motor con una escena de scenes/. ?escena=nombre elige otra (por defecto, constancia).
 import { createPlayer } from '../engine/player.js';
-import escena from '../scenes/constancia.js';
 
 const $ = (s) => document.querySelector(s);
+const pedida = new URLSearchParams(location.search).get('escena') || 'constancia';
+const nombre = /^[a-z0-9_-]+$/.test(pedida) ? pedida : 'constancia';
+const { default: escena } = await import(`../scenes/${nombre}.js`);
 const player = createPlayer({
   scene: escena,
   canvas: $('#c2'),
