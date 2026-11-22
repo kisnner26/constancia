@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>constancia</title>
+<meta name="description" content="un ser humano, 2026. una animación para dejar constancia.">
+<meta name="theme-color" content="#070504">
+<meta property="og:title" content="constancia">
+<meta property="og:description" content="un ser humano, 2026.">
+<meta property="og:image" content="assets/retratos/adolescente.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+<canvas id="c2" aria-hidden="true"></canvas>
+<div id="velo"></div>
+<div id="texto" role="status" aria-live="polite"></div>
+<div id="meta" aria-hidden="true"></div>
+<nav id="puntos" aria-label="escenas"></nav>
+<div id="ctl">
+  <button id="b-sonido" type="button">sonido: apagado</button>
+  <button id="b-pausa" type="button">pausa</button>
+</div>
+<noscript><p style="color:#e9dcc0;padding:2rem;font-family:serif">constancia necesita javascript para dibujarse.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
