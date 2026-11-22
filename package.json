@@ -1,7 +1,7 @@
 {
-  "name": "constancia",
+  "name": "fanal",
   "version": "1.0.0",
-  "description": "animacion web poetica y motor de animaciones",
+  "description": "motor de animacion en canvas 2d y webgl2 para web, macos y windows",
   "main": "desktop/main.js",
   "private": true,
   "scripts": {
@@ -10,8 +10,8 @@
     "build:win": "electron-builder --win zip --x64"
   },
   "build": {
-    "appId": "dev.constancia.player",
-    "productName": "constancia",
+    "appId": "dev.fanal.player",
+    "productName": "fanal",
     "directories": { "output": "dist" },
     "files": ["desktop/**", "index.html", "ejemplo.html", "css/**", "js/**", "engine/**", "scenes/**", "assets/**", "package.json"],
     "mac": { "category": "public.app-category.entertainment", "identity": null, "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }] },
