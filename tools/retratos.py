@@ -505,198 +505,278 @@ def lid_line(st, M, e, rng, order=0.06, bow=None):
         st.add(4, 1, order + 0.01, [tuple(p), tuple(p + nrm * L + d * 0.6)])
 
 
+def warp_pt(warp, p):
+    x = int(np.clip(p[0], 0, W - 1))
+    y = int(np.clip(p[1], 0, H - 1))
+    return (p[0] - warp.dx[y, x], p[1] - warp.dy[y, x])
+
+
+
+
+# ================================================================ version 2: sobre los tonos de la foto
+S6 = 1.55
+M6 = np.array([[S6, 0, 600 - 517 * S6], [0, S6, 770 - 280 * S6]], np.float32)
+
+FG6B = [(150, 100), (200, 10), (260, -90), (360, -150), (480, -170), (620, -150), (690, -80), (712, 20), (708, 100),
+        (700, 150), (694, 260), (692, 380), (706, 430), (850, 415), (850, 820), (240, 820), (300, 640), (345, 560),
+        (350, 540), (292, 470), (240, 462), (206, 385), (212, 330), (160, 250), (135, 120)]
+SHIRT6 = [(352, 548), (300, 640), (240, 820), (850, 820), (850, 415), (706, 430), (700, 470), (640, 590), (612, 650),
+          (560, 690), (470, 700), (400, 650), (382, 600)]
+
+
+def zhang_suen(img):
+    """adelgaza un mapa binario a lineas de 1 px"""
+    im = (img > 0).astype(np.uint8)
+    for _ in range(60):
+        ch = 0
+        for paso in (0, 1):
+            P = np.pad(im, 1)
+            p2, p3, p4, p5 = P[:-2, 1:-1], P[:-2, 2:], P[1:-1, 2:], P[2:, 2:]
+            p6, p7, p8, p9 = P[2:, 1:-1], P[2:, :-2], P[1:-1, :-2], P[:-2, :-2]
+            B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9
+            seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2]
+            A = sum(((seq[i] == 0) & (seq[i + 1] == 1)).astype(np.uint8) for i in range(8))
+            if paso == 0:
+                c1 = (p2 * p4 * p6 == 0) & (p4 * p6 * p8 == 0)
+            else:
+                c1 = (p2 * p4 * p8 == 0) & (p2 * p6 * p8 == 0)
+            m = (im == 1) & (B >= 2) & (B <= 6) & (A == 1) & c1
+            if m.any():
+                im[m] = 0
+                ch += int(m.sum())
+        if ch == 0:
+            break
+    return im
+
+
+def xdog_strokes(st, Ln, mask, exclude, seed, sigma=1.1, eps=0.018, minlen=26, typ=0, w=1):
+    """contornos xdog (diferencia de gaussianas extendida) vectorizados a polilineas finas"""
+    rng = np.random.default_rng(seed)
+    g1 = cv2.GaussianBlur(Ln, (0, 0), sigma)
+    g2 = cv2.GaussianBlur(Ln, (0, 0), sigma * 1.6)
+    d = g1 - 0.98 * g2
+    edge = (d < -eps) & (mask > 0.5) & (exclude < 0.5)
+    edge = cv2.morphologyEx(edge.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    sk = zhang_suen(edge)
+    cs, _ = cv2.findContours(sk * 255, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    for c in cs:
+        c = c[:, 0, :].astype(np.float32)
+        if len(c) < minlen:
+            continue
+        c = c[: len(c) // 2 + 1]
+        k = 3
+        pad = np.pad(c, ((k, k), (0, 0)), mode="edge")
+        ker = np.ones(2 * k + 1) / (2 * k + 1)
+        cs_ = np.stack([np.convolve(pad[:, 0], ker, "valid"), np.convolve(pad[:, 1], ker, "valid")], 1)
+        s0 = 0
+        while s0 < len(cs_) - 5:
+            ln = int(rng.uniform(55, 130))
+            seg = cs_[s0: s0 + ln: 4]
+            if len(seg) >= 3:
+                st.add(typ, w, 0.0 + rng.random() * 0.2, [tuple(q) for q in seg])
+            s0 += ln - 3
+    return st
+
+
+def skin_ramp(t, vieja=False):
+    """moreno calido: sombras #6e4530, medios #9a6644, luces #b07a55. en el aguada (se multiplica sobre el papel)"""
+    papel = np.array([236, 224, 196], np.float32)
+    anchors = np.array([[0x6e, 0x45, 0x30], [0x9a, 0x66, 0x44], [0xb0, 0x7a, 0x55], [0xb8, 0x84, 0x62]], np.float32) / papel * 255
+    anchors = np.clip(anchors, 0, 255)
+    if vieja:
+        g = anchors.mean(1, keepdims=True)
+        anchors = anchors * 0.75 + g * 0.25
+        anchors = anchors * 0.93 + 255 * 0.07
+    xs = np.array([0, 0.35, 0.7, 1.0], np.float32)
+    out = np.zeros(t.shape + (3,), np.float32)
+    for ch in range(3):
+        out[..., ch] = np.interp(t, xs, anchors[:, ch])
+    return out
+
+
+def wash_img(layer, mask, rgb, alpha, seed, amp=7.0, blotch=0.05, mod=None):
+    m, _ = edge_noise_mask(mask, seed, amp)
+    a = m * alpha * (1 + blotch * snoise((H, W), 30, seed + 9))
+    if mod is not None:
+        a = a * mod
+    a = np.clip(a, 0, 0.95)
+    a0 = layer[..., 3]
+    na = a0 + a - a0 * a
+    for i in range(3):
+        layer[..., i] = np.where(na > 1e-4, (layer[..., i] * a0 * (1 - a) + rgb[..., i] * a) / np.maximum(na, 1e-4), 0)
+    layer[..., 3] = na
+
+
 def build(name):
     print("::", name, flush=True)
     seed = sum(map(ord, name)) * 7 + 17
     rng = np.random.default_rng(seed)
-    ang = -8.0 if name != "muerte" else -20.0
-    base, M = load6(ang)
-    base = cv2.fastNlMeansDenoisingColored(base, None, 4, 4, 7, 21)
-    Z = zonas(M)
-    warp = Warp()
-    cfg = dict(gamma=1.1, spacing=3.2, layers=2, hair_alpha=0.78, hair_rgb=(30, 36, 62), gray=False, wash=0.30)
-    extra_D = np.zeros((H, W), np.float32)
+    im = cv2.imread(os.path.join(REF, "6.jpg"))
+    base = cv2.warpAffine(im, M6, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+    outside = 1.0 - cv2.warpAffine(np.ones(im.shape[:2], np.float32), M6, (W, H), flags=cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    M = M6
+    f = lambda pts, b=0: poly(mp(M, pts), b)
+    fg = f(FG6B, 18)
+    yy = np.arange(H, dtype=np.float32)[:, None]
+    fade = np.broadcast_to(np.clip((1440 - yy) / 330.0, 0, 1), (H, W)).astype(np.float32)
+    fg = fg * fade
+    hair = f(HAIR6, 6)
+    shirt = f(SHIRT6, 10) * fade
     lm = {k: mp(M, [v])[0] for k, v in dict(eyeL=EYE_L["iris"], eyeR=EYE_R["iris"], nose=(550, 395), chin=(540, 600),
                                              jawL=(305, 490), jawR=(655, 520), chkL=(365, 430), chkR=(650, 420)).items()}
+    warp = Warp()
     if name == "nino":
-        warp.bulge(lm["eyeL"], 125, 0.40)
-        warp.bulge(lm["eyeR"], 115, 0.40)
+        warp.bulge(lm["eyeL"], 125, 0.40); warp.bulge(lm["eyeR"], 115, 0.40)
         warp.shift(((lm["eyeL"][0] + lm["eyeR"][0]) / 2, lm["eyeL"][1]), 230, (0, 42))
-        warp.bulge(lm["nose"], 120, -0.30)
-        warp.bulge(lm["chin"], 200, -0.30)
-        warp.bulge(lm["chkL"], 170, 0.22)
-        warp.bulge(lm["chkR"], 170, 0.22)
+        warp.bulge(lm["nose"], 120, -0.30); warp.bulge(lm["chin"], 200, -0.30)
+        warp.bulge(lm["chkL"], 170, 0.22); warp.bulge(lm["chkR"], 170, 0.22)
         warp.shift(lm["chin"], 240, (0, -28))
-        cfg.update(layers=1, gamma=1.5, wash=0.24, spacing=4.8)
     elif name == "adulto":
-        warp.bulge(lm["jawL"], 150, 0.14)
-        warp.bulge(lm["jawR"], 150, 0.14)
-        warp.shift(lm["chin"], 150, (0, 26))
-        cfg.update(layers=2, gamma=1.05)
-        extra_D += 0.22 * (blob(mp(M, [(430, 330)])[0], 40) + blob(mp(M, [(612, 292)])[0], 36))
+        warp.bulge(lm["jawL"], 150, 0.14); warp.bulge(lm["jawR"], 150, 0.14); warp.shift(lm["chin"], 150, (0, 26))
     elif name == "viejo":
-        warp.shift(mp(M, [(380, 540)])[0], 110, (-5, 20))
-        warp.shift(mp(M, [(640, 540)])[0], 110, (5, 20))
-        cfg.update(layers=2, gamma=1.0, wash=0.24, hair_rgb=(160, 160, 168), hair_alpha=0.42, gray=True)
-    elif name == "muerte":
-        cfg.update(layers=1, gamma=1.1)
+        warp.shift(mp(M, [(380, 540)])[0], 110, (-5, 20)); warp.shift(mp(M, [(640, 540)])[0], 110, (5, 20))
 
-    # ojos cerrados (muerte): borra iris y pestanas de la foto
     if name == "muerte":
         m = np.zeros((H, W), np.uint8)
         for e in (EYE_L, EYE_R):
             c = mp(M, [e["iris"]])[0]
-            cv2.ellipse(m, (int(c[0]), int(c[1])), (int(60 * 1.45), int(24 * 1.45)), -8, 0, 360, 255, -1)
+            cv2.ellipse(m, (int(c[0]), int(c[1])), (int(58 * S6), int(22 * S6)), -8, 0, 360, 255, -1)
         base = cv2.inpaint(base, m, 8, cv2.INPAINT_TELEA)
-
-    img = warp.apply(base)
-    for k in list(Z):
-        Z[k] = warp.apply(Z[k], cv2.INTER_LINEAR)
-    fg, hair, lips = Z["fg"], Z["hair"], Z["lips"]
-    # retroceso del pelo en el viejo: la frente sube
+    # extension del craneo hacia arriba: el pelo ya esta reflejado; el color se oscurece
     if name == "viejo":
         rec = poly(mp(M, [(330, 215), (400, 150), (500, 90), (580, 50), (660, 70), (700, 130), (660, 190), (560, 150), (460, 195)]), 8)
-        rec = warp.apply(rec, cv2.INTER_LINEAR)
-        piel = np.array([140, 168, 205], np.float32)
-        img = (img * (1 - rec[..., None]) + piel * rec[..., None]).astype(np.uint8)
-        hair = np.clip(hair - rec, 0, 1)
-
-    D, g = tone_map(img, fg, hi_p=90, gamma=cfg["gamma"])
-    D = np.clip(D + extra_D, 0, 1)
-    if name in ('adolescente', 'nino'):
-        low = np.broadcast_to(np.clip((np.arange(H, dtype=np.float32)[:, None] - mp(M, [(0, 520)])[0][1]) / 120.0, 0, 1), (H, W))
-        D = D * (1 - 0.45 * low)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    # el pelo real: oscuro dentro de la zona
-    hair_dark = np.clip((75 - cv2.GaussianBlur(gray, (0, 0), 2.0)) / 25.0, 0, 1)
-    force = warp.apply(poly(mp(M, [(100, -400), (800, -400), (800, 45), (100, 45)]), 10), cv2.INTER_LINEAR)
-    out_ = np.clip(cv2.GaussianBlur(warp.apply(OUTSIDE, cv2.INTER_LINEAR), (0, 0), 6) * 1.5, 0, 1)
-    hair_m = np.clip(hair * np.maximum(hair_dark, np.maximum(force, out_)), 0, 1)
-    hair_m = cv2.GaussianBlur(hair_m, (0, 0), 2.0)
+        reg = base[int(mp(M, [(430, 150)])[0][1]):int(mp(M, [(430, 215)])[0][1]), int(mp(M, [(430, 150)])[0][0]):int(mp(M, [(600, 150)])[0][0])]
+        piel = np.median(reg.reshape(-1, 3), axis=0).astype(np.float32)
+        base = (base * (1 - rec[..., None]) + piel * rec[..., None]).astype(np.uint8)
+    base = warp.apply(base)
+    fg, hair, shirt, outside = (warp.apply(x, cv2.INTER_LINEAR) for x in (fg, hair, shirt, outside))
     if name == "viejo":
-        hair_m = np.clip(hair_m - rec, 0, 1)
-    skin = np.clip(fg - hair_m, 0, 1)
-    Dh = np.maximum(D, force * 0.85)
-    if cfg["gray"]:
-        Dh = np.where(hair_m > 0.5, D * 0.5, D)
-    crown = mp(M, [(420, -120)])[0]
-    flow = flow_field(g, crown, hair_m, sigma=9)
+        hair = np.clip(hair - warp.apply(rec, cv2.INTER_LINEAR), 0, 1)
 
-    st = Strokes(seed)
-    # 1) contornos finos
-    contour_strokes(st, D, np.clip(fg, 0, 1), 0, 1, 0.0, seed, lo=0.05, hi=0.14, minlen=55, hairmask=hair_m, hair_skip=0.5)
-    # 2) rayado de leonardo: paralelo, fino, de abajo-izquierda a arriba-derecha
-    A = -55
-    sp = cfg["spacing"]
-    hatch(st, D, skin, A, sp, 0.16, 0.85, 1, 1, 1.0, seed + 1, chunk=(22, 64))
-    if cfg["layers"] >= 2:
-        hatch(st, D, skin, A + 70, sp * 1.3, 0.50, 0.98, 1, 1, 2.0, seed + 2, chunk=(16, 44))
-    # 3) pelo
-    trace_hair(st, np.clip(Dh + 0.15, 0, 1), hair_m, flow, 7.0 if not cfg["gray"] else 9.0, 0.30, 2, 1, 1.5, seed + 4, length=(45, 115))
-    hatch(st, Dh, hair_m, A, 5.0, 0.55, 0.98, 2, 1, 2.5, seed + 5, chunk=(40, 110))
-    # 4) cejas gruesas y rectas, parpados finos
-    brow_strokes(st, M, BROW_L, rng)
-    brow_strokes(st, M, BROW_R, rng, n=55)
-    eyes_poly = np.zeros((H, W), np.float32)
-    iris_m = np.zeros((H, W), np.float32)
+    # tonos de la foto
+    den = cv2.bilateralFilter(base, 7, 25, 7)
+    gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(cv2.cvtColor(den, cv2.COLOR_BGR2GRAY)).astype(np.float32)
+    sel = gray[fg > 0.7]
+    lo, hi = np.percentile(sel, 2), np.percentile(sel, 97)
+    Ln = np.clip((gray - lo) / (hi - lo), 0, 1)
+    Ln = cv2.GaussianBlur(Ln, (0, 0), 0.8)
+    # el pelo: oscuro dentro de la zona, y la corona (fuera de la foto) siempre
+    force = warp.apply(poly(mp(M, [(100, -400), (800, -400), (800, 45), (100, 45)]), 10), cv2.INTER_LINEAR)
+    out_ = np.clip(cv2.GaussianBlur(outside, (0, 0), 6) * 1.5, 0, 1)
+    Fz = cv2.GaussianBlur(np.maximum(force, out_) * hair, (0, 0), 3)
+    Ln = Ln * (1 - Fz) + 0.07 * Fz
+    hair_dark = np.clip((0.40 - cv2.GaussianBlur(Ln, (0, 0), 1.5)) / 0.10, 0, 1)
+    hair_m = cv2.GaussianBlur(np.clip(hair * np.maximum(hair_dark, np.maximum(force, out_)), 0, 1), (0, 0), 1.6)
+    hair_m = hair_m * np.clip(fg * 2.0, 0, 1)
+    cl_ = cv2.morphologyEx((hair_m > 0.5).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8)).astype(np.float32)
+    hair_m = np.maximum(hair_m, cv2.GaussianBlur(cl_ * (hair > 0.5), (0, 0), 2))
+    if name == "viejo":
+        hair_m = np.clip(hair_m - warp.apply(rec, cv2.INTER_LINEAR), 0, 1)
+    skin = np.clip(fg - hair_m - shirt, 0, 1)
+
+    # ajustes de tono por edad
+    Lw = Ln.copy()
+    if name == "adulto":
+        beard = warp.apply(poly(mp(M, [(310, 480), (380, 500), (470, 545), (520, 548), (600, 530), (655, 500), (672, 470), (672, 540),
+                                      (640, 600), (560, 645), (450, 628), (380, 585), (335, 532)]), 14), cv2.INTER_LINEAR) * skin
+        Lw = Lw - 0.12 * beard
+        for c_ in (mp(M, [(430, 336)])[0], mp(M, [(612, 296)])[0]):
+            Lw = Lw - 0.16 * blob(c_, 34)
+    # realce de ojos: mas capas de sombra donde esta el detalle
+    eyez = np.zeros((H, W), np.float32)
     for e in (EYE_L, EYE_R):
-        if name == "muerte":
+        c = warp_pt(warp, mp(M, [e["iris"]])[0])
+        cv2.ellipse(eyez, (int(c[0]), int(c[1])), (int(70 * S6), int(26 * S6)), -8, 0, 360, 1.0, -1)
+    eyez = cv2.GaussianBlur(eyez, (0, 0), 6)
+    Lw = Lw - 0.16 * eyez * (name != "muerte")
+
+    if os.environ.get('RDEBUG'):
+        d = os.environ['RDEBUG']
+        g1 = cv2.GaussianBlur(Ln, (0, 0), 1.1); g2 = cv2.GaussianBlur(Ln, (0, 0), 1.76)
+        dd = np.clip(0.5 + (g1 - 0.98 * g2) * 8, 0, 1)
+        tile = np.hstack([Ln, hair_m, skin, dd])
+        cv2.imwrite(d + 'dbg.jpg', cv2.resize((tile * 255).astype(np.uint8), None, fx=0.4, fy=0.4))
+    st = Strokes(seed)
+    # 1) contornos xdog
+    excl = np.clip(cv2.erode((hair_m > 0.6).astype(np.uint8), np.ones((9, 9), np.uint8)).astype(np.float32) + (shirt > 0.5) * 1.0, 0, 1)
+    xs_eps = 0.010 if name != "muerte" else 0.016
+    xdog_strokes(st, Ln, fg, excl, seed, eps=xs_eps, minlen=24 if name != "muerte" else 38, w=1)
+    A = -55
+    nlay = {"nino": 2, "muerte": 1}.get(name, 4)
+    thr = [0.82, 0.62, 0.42, 0.22]
+    spc = [5.0, 4.2, 4.0, 3.4]
+    ang = [A, A, A + 72, A + 28]
+    if name == "nino":
+        spc = [6.5, 5.5, 4, 3.4]
+    for k in range(nlay):
+        mk = np.clip((thr[k] - Lw) / 0.07, 0, 1) * skin
+        mk = cv2.GaussianBlur(mk, (0, 0), 1.5)
+        hatch(st, mk, np.ones((H, W), np.float32), ang[k], spc[k] * (1.8 if name == "muerte" else 1), 0.35, 0.65, 1, 1, 1.0 + k, seed + k,
+              chunk=(18, 48) if k >= 2 else (30, 90))
+    # 2) pelo: trazos que siguen la forma + capa oscura
+    Dh = np.clip(1 - Ln, 0, 1)
+    if name == "viejo":
+        Dh = Dh * 0.45
+    flow = flow_field(cv2.cvtColor(base, cv2.COLOR_BGR2GRAY), mp(M, [(420, -120)])[0], hair_m, sigma=9)
+    if name == "muerte":
+        trace_hair(st, np.clip(Dh, 0, 1), hair_m, flow, 13.0, 0.4, 2, 1, 1.5, seed + 4, length=(50, 110))
+    else:
+        trace_hair(st, np.clip(Dh + 0.1, 0, 1), hair_m, flow, 6.5 if name != "viejo" else 9.0, 0.30, 2, 1, 1.5, seed + 4, length=(45, 115))
+        hatch(st, Dh, hair_m, A, 5.0 if name != "viejo" else 8.0, 0.6, 0.98, 2, 1, 2.5, seed + 5, chunk=(30, 90))
+    # 3) camisa negra: rayado suelto que se desvanece hacia abajo
+    if name != "muerte":
+        yfade = np.broadcast_to(np.clip((1420 - yy) / 330.0, 0, 1), (H, W)).astype(np.float32)
+        hatch(st, yfade * 0.9, shirt, A, 6.5, 0.15, 0.85, 1, 1, 3.5, seed + 6, chunk=(30, 90))
+        hatch(st, yfade * 0.8, shirt * (1 - 0.0), A + 40, 9.0, 0.35, 0.8, 1, 1, 3.6, seed + 7, chunk=(20, 60))
+    # 4) cejas y parpados
+    if name != 'muerte':
+        for e in (EYE_L, EYE_R):
+            p0, p1 = mp(M, [e['outer']])[0], mp(M, [e['inner']])[0]
+            up = [warp_pt(warp, q) for q in lid_pts(p0, p1, e['bow'])]
+            st.add(4, 2, 0.06, up)
+    brow_strokes(st, M, BROW_L, rng, n=60 if name != "muerte" else 20)
+    brow_strokes(st, M, BROW_R, rng, n=45 if name != "muerte" else 15)
+    if name == "muerte":
+        for e in (EYE_L, EYE_R):
             p0, p1 = mp(M, [e["outer"]])[0], mp(M, [e["inner"]])[0]
             lid = lid_pts(p0, p1, -0.13)
-            st.add(4, 1, 0.06, lid)
-            n = len(lid)
-            for i in range(int(n * 0.05), int(n * 0.65), 2):
-                p, q = np.array(lid[i]), np.array(lid[min(n - 1, i + 1)])
+            st.add(4, 2, 0.06, lid)
+            n_ = len(lid)
+            for i in range(int(n_ * 0.05), int(n_ * 0.65), 3):
+                p, q = np.array(lid[i]), np.array(lid[min(n_ - 1, i + 1)])
                 d = q - p
                 nrm = np.array([-d[1], d[0]]) / (np.linalg.norm(d) + 1e-6)
                 if nrm[1] < 0:
                     nrm = -nrm
                 st.add(4, 1, 0.07, [tuple(p), tuple(p + nrm * rng.uniform(5, 9) + d * 0.6)])
-            continue
-        lid_line(st, M, e, rng)
-        # iris oscuro: relleno con rayado corto (sin aro)
-        c = np.array(warp_pt(warp, mp(M, [e["iris"]])[0]))
-        rr = e["r"] * 1.45 * (1.25 if name == "nino" else 1.0)
-        for k in range(14):
-            a0 = rng.uniform(0, TAU)
-            rad = rr * np.sqrt(rng.uniform(0.05, 1))
-            q = c + rad * np.array([np.cos(a0), np.sin(a0)])
-            st.add(4, 1, 0.09, [tuple(q - np.array([2.0, -3.5]) * 1.3), tuple(q + np.array([2.0, -3.5]) * 1.3)])
-        cv2.circle(iris_m, (int(c[0]), int(c[1])), int(rr), 1.0, -1)
-        up = [(x_, y_ + 11) for x_, y_ in (warp_pt(warp, p) for p in lid_pts(mp(M, [e["outer"]])[0], mp(M, [e["inner"]])[0], e["bow"]))]
-        lo = [warp_pt(warp, p) for p in lid_pts(mp(M, [e["outer"]])[0], mp(M, [e["inner"]])[0], -0.08)]
-        cv2.fillPoly(eyes_poly, [np.array(up + lo[::-1], np.int32)], 1.0)
-    iris_m = cv2.GaussianBlur(iris_m * eyes_poly, (0, 0), 1.2)
-
-    # 4b) contornos de rostro, nariz y boca: trazo fino e interrumpido, como un estudio
-    def trazo_roto(pts, n=18, w=1, order=0.03, typ=0):
-        q = mp(M, pts)
-        P_ = np.array(q, np.float32)
-        t_ = np.linspace(0, 1, len(P_))
-        tt = np.linspace(0, 1, n * len(P_))
-        xs = np.interp(tt, t_, P_[:, 0]) + rng.normal(0, 0.5, len(tt))
-        ys = np.interp(tt, t_, P_[:, 1]) + rng.normal(0, 0.5, len(tt))
-        i = 0
-        while i < len(tt) - 3:
-            L_ = int(rng.uniform(10, 28))
-            seg = [(xs[k], ys[k]) for k in range(i, min(len(tt), i + L_), 3)]
-            st.add(typ, w, order, seg)
-            i += L_ + int(rng.uniform(0, 4))
-    if name != "muerte":
-        for pts in ([(292, 470), (322, 512), (360, 550), (420, 598), (480, 628), (540, 640)],
-                    [(694, 330), (692, 420), (676, 500), (650, 575), (610, 635)],
-                    [(210, 332), (203, 380), (222, 440), (248, 466)],
-                    [(520, 312), (528, 350), (524, 392), (512, 414)],
-                    [(596, 318), (606, 360), (608, 396), (600, 416)],
-                    [(513, 416), (538, 429), (570, 430), (602, 414)],
-                    [(534, 388), (556, 381), (583, 392)],
-                    [(528, 499), (562, 495), (600, 500), (646, 490)],
-                    [(536, 514), (584, 530), (638, 508)]):
-            trazo_roto(pts)
 
     # 5) extras por edad
     if name == "adulto":
-        beard = poly(mp(M, [(310, 480), (380, 500), (470, 545), (520, 548), (600, 530), (655, 500), (672, 470), (672, 540),
-                            (640, 600), (560, 645), (450, 628), (380, 585), (335, 532)]), 14)
-        beard = warp.apply(beard, cv2.INTER_LINEAR) * skin
-        beard_D = np.clip(D * 0.4 + 0.5 * beard, 0, 1)
-        hatch(st, beard_D, beard, -68, 2.8, 0.18, 0.7, 3, 1, 6.0, seed + 8, chunk=(5, 13))
-        hatch(st, beard_D, beard, -40, 3.4, 0.45, 0.8, 3, 1, 6.1, seed + 9, chunk=(5, 11))
-        for cx, cy in ((430, 336), (612, 296)):
-            for k in range(4):
-                a, b = mp(M, [(cx - 50, cy + k * 3), (cx + 46, cy + k * 3 - 6)])
-                st.add(3, 1, 6.5, curve(a, b, 0.12, 10, 0.4, rng))
+        hatch(st, np.clip(0.5 + 0.5 * beard, 0, 1), beard, -68, 2.8, 0.30, 0.75, 3, 1, 6.0, seed + 8, chunk=(5, 13))
+        hatch(st, np.clip(0.5 + 0.5 * beard, 0, 1), beard, -40, 3.4, 0.45, 0.8, 3, 1, 6.1, seed + 9, chunk=(5, 11))
     if name == "viejo":
         for i in range(5):
             y = 98 + i * 24
-            a, b = mp(M, [(395 + rng.uniform(-10, 10), y + 8), (655 + rng.uniform(-10, 10), y - 8 + rng.uniform(-4, 4))])
-            st.add(3, 1, 6.0, curve(a, b, rng.uniform(-0.04, 0.04), 24, 0.9, rng))
+            a_, b_ = mp(M, [(395 + rng.uniform(-10, 10), y + 8), (655 + rng.uniform(-10, 10), y - 8 + rng.uniform(-4, 4))])
+            st.add(3, 1, 6.0, curve(a_, b_, rng.uniform(-0.04, 0.04), 24, 0.9, rng))
         for (ox, oy), sgn in (((375, 316), -1), ((658, 255), 1)):
             for k in range(4):
-                a, b = mp(M, [(ox + sgn * 8, oy + (k - 1.5) * 6), (ox + sgn * (52 + k * 4), oy + (k - 1.5) * 22)])
-                st.add(3, 1, 6.2, curve(a, b, 0.06, 8, 0.5, rng))
-        for cx, cy, w in ((432, 334, 52), (607, 294, 44)):
+                a_, b_ = mp(M, [(ox + sgn * 8, oy + (k - 1.5) * 6), (ox + sgn * (52 + k * 4), oy + (k - 1.5) * 22)])
+                st.add(3, 1, 6.2, curve(a_, b_, 0.06, 8, 0.5, rng))
+        for cx, cy, w_ in ((432, 336, 52), (607, 296, 44)):
             for dy in (0, 14):
-                a, b = mp(M, [(cx - w, cy + dy), (cx + w, cy + dy - 5)])
-                st.add(3, 1, 6.3, curve(a, b, 0.2, 12, 0.5, rng))
+                a_, b_ = mp(M, [(cx - w_, cy + dy), (cx + w_, cy + dy - 5)])
+                st.add(3, 1, 6.3, curve(a_, b_, 0.2, 12, 0.5, rng))
         for pts in ([(522, 418), (492, 470), (484, 522)], [(600, 428), (648, 474), (662, 524)]):
             q = mp(M, pts)
             st.add(3, 1, 6.4, curve(q[0], q[1], 0.1, 14, 0.7, rng))
             st.add(3, 1, 6.4, curve(q[1], q[2], 0.08, 12, 0.7, rng))
         for k in range(2):
-            a, b = mp(M, [(418 + k * 14, 226), (420 + k * 16, 252)])
-            st.add(3, 1, 6.1, curve(a, b, 0.05, 8, 0.4, rng))
-    if name == "muerte":
-        # contorno de nariz y labios a mano, muy tenue
-        for pts in ([(560, 300), (552, 350), (540, 395)], [(515, 410), (548, 422), (582, 412)],
-                    [(525, 498), (565, 486), (610, 487), (645, 495)], [(530, 510), (585, 524), (640, 500)],
-                    [(545, 518), (590, 540), (632, 515)]):
-            q = mp(M, pts)
-            st.add(0, 1, 0.04, [tuple(np.array(c_) + rng.normal(0, 0.6, 2)) for c_ in q])
+            a_, b_ = mp(M, [(418 + k * 14, 226), (420 + k * 16, 252)])
+            st.add(3, 1, 6.1, curve(a_, b_, 0.05, 8, 0.4, rng))
 
     items = st.items
-    if name == "muerte":
-        items = [s_ for s_ in items if not (s_[0] in (1, 2) and rng.random() < 0.55)]
     if len(items) > MAXSTROKES:
         keep = [s_ for s_ in items if s_[0] in (0, 3, 4)]
         rest = [s_ for s_ in items if s_[0] not in (0, 3, 4)]
@@ -704,34 +784,66 @@ def build(name):
         items = keep + rest[: max(0, MAXSTROKES - len(keep))]
     print("   trazos:", len(items), flush=True)
 
-    # ---- aguada (suave, sin manchas)
+    # ---- aguada: el color real de la foto, suavizado y posterizado
+    col = base.copy()
+    for _ in range(3):
+        col = cv2.bilateralFilter(col, 9, 40, 12)
+    lab = cv2.cvtColor(col, cv2.COLOR_BGR2LAB).astype(np.float32)
+    Lq = np.round(lab[..., 0] / 32.0) * 32.0
+    lab[..., 0] = 0.55 * lab[..., 0] + 0.45 * Lq
+    lab[..., 1:] = 128 + (lab[..., 1:] - 128) * 1.25
+    sk_sel = lab[..., 0][skin > 0.7]
+    p90 = np.percentile(sk_sel, 90)
+    lab[..., 0] = np.clip(lab[..., 0] * (200.0 / max(p90, 1)), 0, 255)
+    rgb = cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB).astype(np.float32)
+    gray_c = rgb.mean(2, keepdims=True)
     ag = np.zeros((H, W, 4), np.float32)
-    fade = np.broadcast_to(np.clip((1180 - np.arange(H, dtype=np.float32)[:, None]) / 260.0, 0.1, 1), (H, W))
-    Ds = cv2.GaussianBlur(D, (0, 0), 6)
+    fd = fade * np.broadcast_to(np.clip((1300 - yy) / 260.0, 0.0, 1), (H, W))
+    # piel: rampa de moreno calido + variacion real de la foto
+    Ls = cv2.GaussianBlur(np.clip((lab[..., 0] - 40) / 190.0, 0, 1), (0, 0), 5)
+    t = np.clip(0.15 + Ls * 0.95, 0, 1)
+    ramp = skin_ramp(t, name == "viejo")
+    chroma = rgb - gray_c
+    cm = (chroma * skin[..., None]).sum((0, 1)) / (skin.sum() + 1e-6)
+    skin_rgb = np.clip(ramp + 0.9 * (chroma - cm) * (0.8 if name != "viejo" else 0.5), 0, 255)
+    alpha_skin = {"nino": 0.5, "muerte": 0.14, "viejo": 0.5}.get(name, 0.58)
     if name == "muerte":
-        wash(ag, skin, (214, 204, 202), 0.16, seed + 30, amp=8, mod=fade, blotch=0.06)
-        wash(ag, hair_m, (120, 124, 140), 0.26, seed + 34, amp=5, blotch=0.06, mod=0.5 + 0.7 * Dh)
-        wash(ag, lips, (190, 120, 120), 0.12, seed + 33, amp=3)
+        skin_rgb = skin_rgb * 0.3 + 255 * 0.7
+    wash_img(ag, skin, skin_rgb, alpha_skin, seed + 30, amp=7, mod=fd)
+    # labios: tono real de la foto, un poco mas vivo
+    lips = warp.apply(ell(mp(M, [MOUTH])[0], (int(62 * S6), int(22 * S6)), -8, 4), cv2.INTER_LINEAR) * skin
+    lr = np.clip(rgb * np.array([1.0, 0.8, 0.8]), 0, 255)
+    wash_img(ag, lips, lr, 0.22 if name != "muerte" else 0.06, seed + 33, amp=3)
+    # pelo y cejas
+    hr = 255 - (255 - rgb) * 0.8
+    if name == "viejo":
+        gr = np.full_like(hr, 188.0)
+        hr = hr * 0.35 + gr * 0.65
+        hair_alpha = 0.5
+    elif name == "muerte":
+        hr = hr * 0.4 + 255 * 0.6
+        hair_alpha = 0.3
     else:
-        wash(ag, skin, (236, 190, 150), cfg["wash"], seed + 30, amp=7, mod=fade * (0.8 + 0.4 * Ds), blotch=0.06)
-        wash(ag, skin * np.clip(Ds, 0, 1) ** 1.4, (170, 120, 90), 0.34, seed + 31, amp=3, mod=fade, blotch=0.04)
-        cheek = np.clip(blob(lm["chkL"], 60) + blob(lm["chkR"], 55), 0, 1) * skin
-        wash(ag, cheek, (222, 130, 112), 0.09 if name != "viejo" else 0.05, seed + 32, amp=10, blotch=0.04)
-        wash(ag, lips, (188, 84, 80), 0.34 if name != "viejo" else 0.22, seed + 33, amp=3, blotch=0.04)
-        wash(ag, hair_m, cfg["hair_rgb"], cfg["hair_alpha"], seed + 34, amp=4, blotch=0.06, mod=0.6 + 0.6 * Dh)
-        bm = np.zeros((H, W), np.float32)
-        for pts in (BROW_L, BROW_R):
-            cv2.polylines(bm, [np.array(mp(M, pts), np.int32)], False, 1.0, int(17 * 1.45))
-        bm = cv2.GaussianBlur(warp.apply(bm, cv2.INTER_LINEAR), (0, 0), 3) * skin
-        wash(ag, bm, (40, 40, 56) if not cfg["gray"] else (150, 150, 158), 0.55 if not cfg["gray"] else 0.4, seed + 36, amp=2, blotch=0.04)
-        wash(ag, iris_m, (70, 40, 22), 0.7, seed + 37, amp=1.0, blotch=0.03)
+        hair_alpha = 0.7
+    wash_img(ag, hair_m, hr, hair_alpha, seed + 34, amp=4, mod=0.65 + 0.5 * Dh)
+    bm = np.zeros((H, W), np.float32)
+    for pts in (BROW_L, BROW_R):
+        cv2.polylines(bm, [np.array(mp(M, pts), np.int32)], False, 1.0, int(17 * S6))
+    bm = cv2.GaussianBlur(warp.apply(bm, cv2.INTER_LINEAR), (0, 0), 3) * skin
+    br = np.where(name == "viejo", 0.4 * hr + 0.6 * 190, hr) if name == "viejo" else hr
+    wash_img(ag, bm, br, 0.5 if name != "muerte" else 0.1, seed + 36, amp=2)
+    # camisa
+    sr = 255 - (255 - rgb) * 0.8
+    wash_img(ag, shirt, sr, 0.7 if name != "muerte" else 0.0, seed + 38, amp=6, mod=fd)
+    # iris real
+    if name != "muerte":
+        iris_m = np.zeros((H, W), np.float32)
+        for e in (EYE_L, EYE_R):
+            c = warp_pt(warp, mp(M, [e["iris"]])[0])
+            cv2.circle(iris_m, (int(c[0]), int(c[1])), int(e["r"] * S6 * (1.25 if name == "nino" else 1.0)), 1.0, -1)
+        iris_m = cv2.GaussianBlur(iris_m * (skin > 0.3), (0, 0), 1.2)
+        wash_img(ag, iris_m, np.clip(rgb * 0.6, 0, 255), 0.4, seed + 37, amp=1.0)
     finalize(name, items, ag)
-
-
-def warp_pt(warp, p):
-    x = int(np.clip(p[0], 0, W - 1))
-    y = int(np.clip(p[1], 0, H - 1))
-    return (p[0] - warp.dx[y, x], p[1] - warp.dy[y, x])
 
 
 if __name__ == "__main__":
