@@ -237,21 +237,29 @@ export function crearMundo(env) {
     ctx.fillStyle = '#16141a'; ctx.fill('evenodd');
     ctx.strokeStyle = 'rgba(200,170,140,0.5)'; ctx.lineWidth = 0.25;
     ctx.beginPath(); ctx.moveTo(a[0] - o, a[1] - o); ctx.lineTo(b[0] + o, b[1] - o); ctx.lineTo(c[0] + o, c[1] + o + 0.8); ctx.lineTo(d[0] - o, d[1] + o + 0.8); ctx.closePath(); ctx.stroke();
-    // bisagra y base con teclado en perspectiva
+    // base de aluminio plateado con teclas pequenas, trackpad y bisagra
     const y0 = d[1] + o + 0.8;
-    ctx.beginPath(); ctx.moveTo(d[0] - o, y0); ctx.lineTo(c[0] + o, y0); ctx.lineTo(c[0] + o + 8, y0 + 12); ctx.lineTo(d[0] - o - 8, y0 + 12); ctx.closePath();
-    const bg = ctx.createLinearGradient(0, y0, 0, y0 + 12);
-    bg.addColorStop(0, '#26232b'); bg.addColorStop(1, '#14121a');
-    ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = 'rgba(200,170,140,0.4)'; ctx.stroke();
-    ctx.fillStyle = '#0d0b10';
-    ctx.fillRect(d[0] - o, y0 - 0.2, c[0] - d[0] + 2 * o, 0.8);
-    for (let r = 0; r < 4; r++) {
-      const yy = y0 + 1.6 + r * 2.4;
-      const k = (yy - y0) / 12;
-      const xa = lerp(d[0] - o, d[0] - o - 8, k) + 1.5, xb = lerp(c[0] + o, c[0] + o + 8, k) - 1.5;
-      ctx.strokeStyle = `rgba(120,150,210,${0.22 * brillo})`; ctx.lineWidth = 0.35;
-      ctx.beginPath(); ctx.moveTo(xa, yy); ctx.lineTo(xb, yy); ctx.stroke();
+    const bx = 9, bh = 13;
+    ctx.beginPath(); ctx.moveTo(d[0] - o, y0); ctx.lineTo(c[0] + o, y0); ctx.lineTo(c[0] + o + bx, y0 + bh); ctx.lineTo(d[0] - o - bx, y0 + bh); ctx.closePath();
+    const bg = ctx.createLinearGradient(0, y0, 0, y0 + bh);
+    bg.addColorStop(0, '#8f929a'); bg.addColorStop(1, '#c3c6cc');
+    ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = 'rgba(25,25,32,0.8)'; ctx.lineWidth = 0.25; ctx.stroke();
+    ctx.fillStyle = '#5b5e66'; ctx.fillRect(d[0] - o, y0 - 0.15, c[0] - d[0] + 2 * o, 0.7);
+    const wAt = (k) => [lerp(d[0] - o, d[0] - o - bx, k) + 1.4, lerp(c[0] + o, c[0] + o + bx, k) - 1.4];
+    for (let r = 0; r < 5; r++) {
+      const k0 = 0.1 + r * 0.115, k1 = k0 + 0.085;
+      const [xa0, xb0] = wAt(k0), [xa1, xb1] = wAt(k1), n = 15;
+      for (let q = 0; q < n; q++) {
+        const f0 = q / n, f1 = (q + 0.82) / n;
+        ctx.beginPath();
+        ctx.moveTo(lerp(xa0, xb0, f0), y0 + k0 * bh); ctx.lineTo(lerp(xa0, xb0, f1), y0 + k0 * bh);
+        ctx.lineTo(lerp(xa1, xb1, f1), y0 + k1 * bh); ctx.lineTo(lerp(xa1, xb1, f0), y0 + k1 * bh); ctx.closePath();
+        ctx.fillStyle = '#1b1c21'; ctx.fill();
+      }
     }
+    { const [xa, xb] = wAt(0.76), [xc, xd] = wAt(0.96); const m = (xa + xb) / 2, m2 = (xc + xd) / 2;
+      ctx.beginPath(); ctx.moveTo(m - 6, y0 + 0.76 * bh); ctx.lineTo(m + 6, y0 + 0.76 * bh); ctx.lineTo(m2 + 7, y0 + 0.96 * bh); ctx.lineTo(m2 - 7, y0 + 0.96 * bh); ctx.closePath();
+      ctx.fillStyle = '#a7aab1'; ctx.fill(); ctx.strokeStyle = 'rgba(40,40,48,0.5)'; ctx.stroke(); }
     // la luz de la pantalla sobre el escritorio
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     const rg = ctx.createRadialGradient(15, y0 + 14, 0, 15, y0 + 14, 60);
@@ -322,14 +330,19 @@ export function crearMundo(env) {
     const rg = ctx.createRadialGradient(50, -6, 3, 40, -6, 80);
     rg.addColorStop(0, 'rgba(120,160,255,0.35)'); rg.addColorStop(1, 'rgba(120,160,255,0)');
     ctx.fillStyle = rg; ctx.fillRect(-120, -70, 260, 130); ctx.restore();
-    huecoPantalla(QUAD_B);
+    // pantalla vista de lado: lamina brillante sin textura de shader
+    { const q = QUAD_B; ctx.beginPath(); ctx.moveTo(...q[0]); ctx.lineTo(...q[1]); ctx.lineTo(...q[2]); ctx.lineTo(...q[3]); ctx.closePath();
+      const gr = ctx.createLinearGradient(q[0][0], 0, q[1][0], 0); gr.addColorStop(0, '#3a3020'); gr.addColorStop(1, '#171220'); ctx.fillStyle = gr; ctx.fill();
+      ctx.save(); ctx.clip();
+      for (let i = 0; i < 40; i++) { const x = lerp(q[0][0], q[1][0], hash(i * 3 + 1)), y = lerp(q[0][1] + 3, q[3][1] - 3, hash(i * 3 + 2)); ctx.fillStyle = `rgba(255,${190 + hash(i) * 40},120,${0.35 + 0.4 * hash(i + 9)})`; ctx.fillRect(x, y, 0.6, 0.9); }
+      const hg = ctx.createLinearGradient(0, q[0][1], 0, q[3][1]); hg.addColorStop(0, 'rgba(255,200,120,0.5)'); hg.addColorStop(0.3, 'rgba(255,200,120,0)'); ctx.fillStyle = hg; ctx.fillRect(q[0][0], q[0][1], 40, 40); ctx.restore(); }
     // marco de la pantalla (borde del portatil visto de lado)
     ctx.beginPath();
     ctx.moveTo(QUAD_B[0][0] - 1.6, QUAD_B[0][1] - 1.6); ctx.lineTo(QUAD_B[1][0] + 1.6, QUAD_B[1][1] - 1.6); ctx.lineTo(QUAD_B[2][0] + 1.6, QUAD_B[2][1] + 1.6); ctx.lineTo(QUAD_B[3][0] - 1.6, QUAD_B[3][1] + 1.6); ctx.closePath();
     ctx.moveTo(...QUAD_B[0]); ctx.lineTo(...QUAD_B[3]); ctx.lineTo(...QUAD_B[2]); ctx.lineTo(...QUAD_B[1]); ctx.closePath();
-    ctx.fillStyle = '#16141a'; ctx.fill('evenodd');
+    ctx.fillStyle = '#9a9da5'; ctx.fill('evenodd');
     ctx.beginPath(); ctx.moveTo(34, 21.5); ctx.lineTo(74, 11.8); ctx.lineTo(86, 24); ctx.lineTo(28, 30); ctx.closePath();
-    ctx.fillStyle = '#1c1922'; ctx.fill();
+    ctx.fillStyle = '#a9acb3'; ctx.fill();
     // personaje en perfil mirando a la derecha
     const parp = (() => { const k = (S.ta % 4.3); return k < 0.16 ? Math.sin((k / 0.16) * Math.PI) : 0; })();
     ctx.save();
@@ -363,7 +376,7 @@ export function crearMundo(env) {
     manosTeclado(ctx, S.ta, { luz: 1, ritmo: 1 });
     ctx.restore();
     // reloj en la muneca izquierda: la aguja tiembla
-    reloj(ctx, S.ta, -17 * 0.88 - 2, 8 + 17 * 0.88 + 2, 4.6);
+    reloj(ctx, S.ta, -17 * 0.88 - 1, 8 + 24 * 0.88, 4.6);
   }
 
   // ------------------------------------------------------------ orquestacion del cuarto
@@ -416,8 +429,7 @@ export function crearMundo(env) {
     cam.x = c.x;
     // la pantalla de gl: la toma mas cercana a la camara
     const dA = Math.abs(cam.x - 0), dB = Math.abs(cam.x - W_SHOT);
-    if (dB < dA && dB < W_SHOT * 0.7) { quad = QUAD_B; offX = W_SHOT; }
-    const visible = (dA < W_SHOT * 0.7 || dB < W_SHOT * 0.7) && !(whip > 0.6);
+    const visible = dA < W_SHOT * 0.7 && !(whip > 0.6);
     const push = t > K.push;
     const zoomGL = push ? 1 + Math.max(0, (cam.z - 3.2)) * 0.3 : 1;
     if (visible || push) {
@@ -648,7 +660,7 @@ export function crearMundo(env) {
     const push = 1 + 0.05 * u + (k > 0 ? 0 : 0);
     const tr = trazoRetrato(w, h, push);
     tr.x += Math.sin(S.ta * 0.4) * 2; tr.y += Math.cos(S.ta * 0.33) * 1.5;
-    const noche = k === 4 ? sstep(0.46, 0.92, u) : 0;
+    const noche = k === 4 ? sstep(0.28, 0.7, u) : 0;
     // el papel se abre como un iris desde el punto donde acabo el destello
     const reveal = k === 0 ? ease(clamp(tl / 2.6)) : 1;
     ctx.save();
@@ -657,13 +669,14 @@ export function crearMundo(env) {
     ctx.drawImage(getPapel(w, h), 0, 0, w, h);
     ctx.globalAlpha = 1;
     const mph = k < 4 ? clamp((u - 0.78) / 0.22) : 0;
-    const alfaAg = k === 0 ? sstep(0.4, 0.75, u) : sstep(0.0, 0.3, u);
+    const alfaAg = k === 0 ? sstep(0.4, 0.75, u) : 1;
     // respiracion del retrato
     const resp = 1 + Math.sin(S.ta * 1.2) * 0.0025;
     ctx.translate(w / 2, h / 2); ctx.scale(resp, resp); ctx.translate(-w / 2, -h / 2);
     if (mph > 0) {
       const B = R[EDADES[k + 1]];
-      dibujarAguada(ctx, P, tr, (1 - sstep(0, 0.6, mph)) * alfaAg);
+      dibujarAguada(ctx, P, tr, (1 - mph) * alfaAg);
+      dibujarAguada(ctx, B, tr, mph);
       dibujarMorph(ctx, P, B, mph, tr, 1);
     } else if (k === 4) {
       muerte(S, P, tr, ts, u, noche);
@@ -682,7 +695,7 @@ export function crearMundo(env) {
   function muerte(S, P, tr, ts, u, noche) {
     const { w, h } = S;
     const lx = w * 0.76, ly = h * 0.2;
-    const luz = sstep(0.5, 0.9, u);
+    const luz = sstep(0.25, 0.65, u);
     if (luz > 0) {
       const rr = Math.min(w, h) * (0.1 + 0.2 * luz);
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -690,15 +703,15 @@ export function crearMundo(env) {
       ctx.globalAlpha = luz * 0.95; ctx.drawImage(SPR_LUZ, lx - rr * 0.6, ly - rr * 0.6, rr * 1.2, rr * 1.2);
       ctx.restore();
     }
-    dibujarAguada(ctx, P, tr, (1 - sstep(0.4, 0.62, u)) * sstep(0, 0.2, u));
+    dibujarAguada(ctx, P, tr, (1 - sstep(0.3, 0.5, u)));
     const paths = [new Path2D(), new Path2D(), new Path2D(), new Path2D(), new Path2D()];
     const alas = new Path2D(), cuerpos = new Path2D();
     const sh = Math.min(w, h) / 900;
     const seg = u * 10.8;
     for (let i = 0; i < P.n; i++) {
       const cyp = P.cen[i * 2 + 1];
-      const rel = 4.4 + 2.2 * (cyp / 1500) + 1.1 * hash(i * 3 + 7);
-      const vuelo = 2.6 + 2.0 * hash(i * 5 + 1);
+      const rel = 2.6 + 2.6 * (cyp / 1500) + 1.0 * hash(i * 3 + 7);
+      const vuelo = 3.4 + 2.4 * hash(i * 5 + 1);
       const a = P.off[i], b = P.off[i + 1];
       if (seg < rel) {
         const tr0 = seg > rel - 1.5 ? (1 - (rel - seg) / 1.5) : 0;
@@ -718,7 +731,7 @@ export function crearMundo(env) {
         const orb = (20 + 90 * hash(i + 21)) * sh, an = seg * (0.8 + hash(i + 31) * 1.2) + ph;
         x = lx + Math.cos(an) * orb * (0.6 + 0.4 * Math.sin(seg * 0.7 + ph)); y = ly + Math.sin(an * 1.3) * orb * 0.7;
       }
-      const tam = (3.2 + 3.2 * hash(i + 41)) * sh, fl = Math.sin(seg * (20 + hash(i + 51) * 10) + ph) * 0.9;
+      const tam = (5.5 + 5 * hash(i + 41)) * sh, fl = Math.sin(seg * (20 + hash(i + 51) * 10) + ph) * 0.9;
       const dir = Math.atan2(ly - y, lx - x) + (hash(i + 61) - 0.5) * 1.2;
       for (const sg of [-1, 1]) {
         const an = dir + sg * (0.55 + Math.abs(fl) * 0.7);
@@ -737,7 +750,7 @@ export function crearMundo(env) {
       ctx.stroke(paths[tp]);
     }
     ctx.restore();
-    ctx.save(); ctx.globalAlpha = 0.85;
+    ctx.save(); ctx.globalAlpha = 0.92;
     const cm = [107, 58, 31].map((v, j) => Math.round(lerp(v, [244, 232, 196][j], 0.25 + 0.75 * noche)));
     ctx.fillStyle = `rgb(${cm[0]},${cm[1]},${cm[2]})`; ctx.fill(alas); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.stroke(cuerpos);
     ctx.restore();
@@ -751,7 +764,7 @@ export function crearMundo(env) {
     const gs = env.glEscala;
     // fase 1: la luz crece y se vuelve el ojo; fase 2: empuje hacia la pupila; fase 3: la pupila llena el cuadro
     const aparece = sstep(1.2, 4.2, tl);
-    const empuje = Math.pow(clamp((tl - 5) / (dur - 5)), 2.4);
+    const empuje = Math.pow(clamp((tl - 4) / (dur - 4)), 1.6);
     const escala = Math.exp(lerp(Math.log(0.2), Math.log(7.5), empuje));
     const mood = 0.5 - 0.5 * Math.cos(Math.max(0, tl - 3) * TAU / 8.5);
     const parp = (() => { const q = (S.ta % 5.2); return q < 0.2 ? Math.sin((q / 0.2) * Math.PI) : 0; })();
@@ -759,7 +772,7 @@ export function crearMundo(env) {
     const lx = w * 0.76, ly = h * 0.2;
     const lk = 1 - sstep(0.5, 3.5, tl);
     env.glOp(aparece);
-    if (aparece > 0) G.dibujar('ojo', { uRes: [env.gw, env.gh], uT: S.ta, uC: [w * 0.5 * gs, h * 0.5 * gs], uR: base * escala * gs * (1 + 0.08 * Math.sin(S.ta * 0.6)), uMood: mood, uFade: 1, uBlink: parp });
+    if (aparece > 0) G.dibujar('ojo', { uRes: [env.gw, env.gh], uT: S.ta, uC: [w * 0.5 * gs, h * 0.5 * gs], uR: base * escala * gs * (1 + 0.08 * Math.sin(S.ta * 0.6)), uMood: mood, uFade: 1, uBlink: parp, uJulia: sstep(0.18, 0.7, empuje), uPupil: sstep(0.5, 0.95, empuje) });
     ctx.fillStyle = '#05040a'; ctx.globalAlpha = 1 - aparece; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
     if (lk > 0) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -820,7 +833,7 @@ export function crearMundo(env) {
   // ------------------------------------------------------------ 6 el planeta lejano al amanecer
   function criaturasLuz(S, n, cx, cy, rx, ry, morph, alfa) {
     // luciernagas que, con la luz del amanecer, se vuelven polillas
-    const sh = Math.min(S.w, S.h) / 900;
+    const sh = Math.min(S.w, S.h) / 700;
     const alas = new Path2D();
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < n; i++) {
@@ -869,10 +882,10 @@ export function crearMundo(env) {
     env.glOp(1);
     // figura de espaldas, pequena, con luz calida de borde; la camara se acerca con paralaje
     const z = lerp(1, 1.5, ease(clamp(tl / dur)));
-    const fx = w * (0.3 - 0.02 * clamp(tl / dur)), fy = h * 0.9;
+    const fx = w * (0.3 - 0.02 * clamp(tl / dur)), fy = h * 0.93;
     ctx.save();
     ctx.translate(fx, fy);
-    const sc = u * 0.21 * z;
+    const sc = u * 0.27 * z;
     ctx.scale(sc, sc);
     // sombra larga hacia el espectador
     const sg = ctx.createLinearGradient(0, 100, -20, 330);
@@ -883,7 +896,7 @@ export function crearMundo(env) {
     personajeEspalda(ctx, S.ta, { luz: 0.85, rim: 'rgba(255,170,100,0.95)', completo: true, viento: 1.6, mira: -0.5 + 0.1 * Math.sin(S.ta * 0.3), giro: 0 });
     ctx.restore();
     // fireflies -> polillas con el amanecer
-    criaturasLuz(S, reducir ? 8 : 22, fx, fy - u * 12, u * 36, u * 14, sstep(dur * 0.25, dur * 0.55, tl), sstep(1, 4, tl));
+    criaturasLuz(S, reducir ? 10 : 30, fx, fy - u * 20, u * 46, u * 18, sstep(dur * 0.2, dur * 0.5, tl), sstep(0.5, 3, tl));
     polvoViento(S, reducir ? 25 : 90, fade, tl);
     // nave anular a lo lejos, girando contra las estrellas
     anillo(S, w * 0.72, h * 0.16 + Math.sin(S.ta * 0.1) * 3, Math.min(w, h) * 0.028, S.ta * 0.35, S.ta, 0.8 * (1 - sstep(0.4, 0.8, tl / dur)) * sstep(2, 5, tl));

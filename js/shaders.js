@@ -138,13 +138,15 @@ void main(){
   o = vec4(col * uFade, 1.);
 }`;
 
-// ------------------------------------------------------------------ el ojo
+// ------------------------------------------------------------------ el ojo del personaje: marron muy oscuro, parpado cansado, piel morena
 export const OJO = CABECERA + `
 uniform vec2 uC;        // centro del ojo (px, y hacia arriba)
 uniform float uR;       // radio del iris en px
 uniform float uMood;    // 0 frio/miedo ... 1 calido/alegria
 uniform float uFade;
 uniform float uBlink;
+uniform float uJulia;   // 0..1: el fractal aparece dentro del iris y domina
+uniform float uPupil;   // 0..1: la pupila se abre hacia la galaxia
 const float PI = 3.14159265;
 float pn(float ang, float rad, float N){
   float x = ang / (2. * PI) * N + N, i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
@@ -152,97 +154,100 @@ float pn(float ang, float rad, float N){
   float j = floor(rad), g = fract(rad); g = g * g * (3. - 2. * g);
   return mix(mix(hash(vec2(i0, j)), hash(vec2(i1, j)), f), mix(hash(vec2(i0, j + 1.)), hash(vec2(i1, j + 1.)), f), g);
 }
-vec3 paleta(float m, float mood){
-  vec3 fr = mix(vec3(.01, .05, .28), vec3(.30, .72, 1.), m);
-  vec3 ca = mix(vec3(.32, .09, .015), vec3(1., .78, .30), m);
-  return mix(fr, ca, mood);
-}
 vec3 galaxia(vec2 g, float mood){
   float gr = length(g * 1.25), ga = atan(g.y, g.x);
   float arms = pow(.5 + .5 * cos(2. * (ga - 2.7 * log(gr + .06) - uT * .12)), 2.6) * exp(-gr * 2.0);
   float core = exp(-gr * gr * 26.) * 1.3;
-  vec3 tone = mix(vec3(.55, .66, 1.), vec3(1., .82, .52), mood);
+  vec3 tone = mix(vec3(.62, .70, 1.), vec3(1., .80, .50), mood);
   vec3 c = tone * (arms * .9 + core);
   float neb = fbm(g * 2.6 + vec2(uT * .02, 3.));
   c += mix(vec3(.10, .12, .45), vec3(.45, .16, .05), mood) * smoothstep(.35, .85, neb) * .55 * exp(-gr * .8);
-  vec2 sg = g * 22.;
-  vec2 id = floor(sg);
-  float h = hash(id);
+  vec2 sg = g * 22.; vec2 id = floor(sg); float h = hash(id);
   if (h > .93) c += vec3(.9, .95, 1.) * smoothstep(.16, .0, length(fract(sg) - .5 + (hash(id + 3.) - .5) * .5)) * (h - .9) * 9.;
   return c;
 }
 void main(){
-  float mood = uMood;
-  float fear = 1. - mood;
+  float mood = uMood, fear = 1. - mood;
   vec2 p = gl_FragCoord.xy - uC;
   p += fear * vec2(sin(uT * 47.) + sin(uT * 31.3), sin(uT * 53.) + cos(uT * 37.)) * uR * .004;
-  float R = uR * (1. + .10 * mood);
+  float R = uR * (1. + .08 * mood);
   vec2 q = p / R;
   float r = length(q), a = atan(q.y, q.x);
-  // parpados
-  float Wx = 3.6;
+  // parpados: el superior pesado y caido (mirada cansada)
+  float Wx = 3.4;
   float xx = clamp(abs(q.x) / Wx, 0., 1.);
   float arco = 1. - xx * xx;
   float bl = 1. - uBlink;
-  float yu = (.92 * pow(arco, .8) + .02) * bl - .9 * uBlink * (1. - arco);
-  float yl = (-1.12 * pow(arco, .8) - .02) * bl;
+  float yu = (.58 * pow(arco, .75) + .02) * bl - .9 * uBlink * (1. - arco);
+  float yl = (-1.0 * pow(arco, .8) - .02) * bl;
   bool dentro = abs(q.x) < Wx && q.y < yu && q.y > yl;
   vec3 col;
+  float du = q.y - yu, dl = yl - q.y;
   if (!dentro){
-    float du = q.y - yu, dl = yl - q.y;
     float dist = abs(q.x) < Wx ? max(du, dl) : 1.;
-    vec3 piel = vec3(.30, .19, .13) * (.55 + .35 * fbm(q * 1.5 + 4.));
-    float diag = abs(fract((q.x * .7 + q.y) * 9.) - .5) * 2.;
-    float tr = smoothstep(.55, .9, diag) * (.35 + .5 * smoothstep(0., .8, dist));
-    float pli = smoothstep(.88, 1., sin(max(dist, 0.) * 22. + fbm(q * 3.) * 3.)) * exp(-max(dist, 0.) * 1.3);
-    col = piel * (1. - tr * .55) * (1. - pli * .55);
-    col = mix(col, vec3(.03, .015, .012), smoothstep(.12, .0, dist));
+    // piel morena con luz calida desde arriba y sombra bajo el parpado
+    vec3 piel = mix(vec3(.52, .33, .21), vec3(.66, .44, .30), smoothstep(-.2, 1.6, q.y));
+    piel *= .82 + .28 * fbm(q * 2.4 + 4.) ;
+    piel = mix(piel, vec3(.20, .11, .07), smoothstep(.55, .0, dist) * (du > 0. ? .8 : .45));
+    // pliegue del parpado: una linea fina por encima, mas caida hacia fuera
+    float crease = smoothstep(.07, .0, abs(du - .55 - .12 * xx)) * step(0., du) * (1. - smoothstep(.7, 1., xx));
+    piel = mix(piel, vec3(.12, .06, .04), crease * .75);
+    // pestanas: trazos finos que salen del borde del parpado superior
+    float lash = 0.;
+    if (du > 0. && abs(q.x) < Wx * .92){
+      float cell = q.x * 9. + du * 5.;
+      float li = abs(fract(cell) - .5);
+      lash = smoothstep(.12, .0, li) * smoothstep(.34, .02, du) * step(.15, hash(vec2(floor(cell), 2.)));
+    }
+    piel = mix(piel, vec3(.02, .012, .01), clamp(lash, 0., 1.));
+    // linea gruesa del borde del parpado
+    piel = mix(piel, vec3(.015, .008, .006), smoothstep(.07 + .06 * (1. - xx), .0, abs(du)) * step(du, .02) * 0. + smoothstep(.06, .0, du) * step(0., du) + smoothstep(.04, .0, dl) * step(0., dl) * .6);
+    col = piel;
   } else {
     float eu = yu - q.y, el = q.y - yl;
     float borde = min(min(eu, el), (Wx - abs(q.x)) * .6);
-    vec3 escl = vec3(.84, .77, .68) * (.28 + .72 * smoothstep(0., .5, borde));
-    escl += vec3(.25, .03, .02) * smoothstep(.45, .0, borde) * .25;
+    vec3 escl = vec3(.74, .65, .55) * (.2 + .8 * smoothstep(0., .45, borde));
+    escl += vec3(.22, .05, .03) * smoothstep(.4, .0, borde) * .3;
+    escl += mix(vec3(0., .01, .03), vec3(0.), mood) * fear;
     col = escl;
     if (r < 1.){
       float rr = r;
-      float fib = pn(a, rr * 5., 44.) * .6 + pn(a, rr * 11. + 3., 88.) * .4;
-      float colar = smoothstep(.62, .5, abs(rr - .55) * 1.) * .0;
-      vec2 z = q * 1.3;
+      float fib = pn(a, rr * 6., 60.) * .55 + pn(a, rr * 14. + 3., 120.) * .45;
+      float k = 1.3 - .45 * uJulia;
+      vec2 z = q * k;
       float ca = uT * .21;
       vec2 c = vec2(-.79 + .09 * cos(ca), .15 + .06 * sin(ca * 1.3));
       float n = 0.;
-      for (int i = 0; i < 64; i++){
-        z = vec2(z.x * z.x - z.y * z.y, 2. * z.x * z.y) + c;
-        if (dot(z, z) > 16.) break;
-        n += 1.;
-      }
+      for (int i = 0; i < 64; i++){ z = vec2(z.x * z.x - z.y * z.y, 2. * z.x * z.y) + c; if (dot(z, z) > 16.) break; n += 1.; }
       float m = n < 63. ? n - log2(log2(dot(z, z))) + 4. : 0.;
-      float mm = fract(m * .045 + .1 * uT * .1 + mood * .2);
-      vec3 jc = paleta(mm, mood) * (.5 + .9 * smoothstep(0., 20., m));
-      vec3 fc = paleta(.25 + .7 * fib, mood) * (.35 + .95 * fib);
-      vec3 ic = mix(fc, jc, .52);
-      ic *= smoothstep(1., .86, rr) * (.55 + .6 * smoothstep(.35, .62, rr));
-      ic += paleta(.9, mood) * exp(-pow((rr - .46) * 9., 2.)) * .35;
-      ic *= smoothstep(.0, .22, eu) * .75 + .25;
+      float mm = fract(m * .045 + .08 * uT * .1);
+      // iris marron muy oscuro, casi negro, con fibras finas y un anillo ambar sutil
+      vec3 oscuro = vec3(.040, .020, .012), medio = vec3(.17, .08, .035), ambar = vec3(.62, .33, .09);
+      vec3 fc = mix(oscuro, medio, fib * .85) + ambar * exp(-pow((rr - .62) * 6.5, 2.)) * (.10 + .14 * fib) * (.5 + .5 * mood);
+      vec3 jpal = mix(vec3(.05, .025, .012), mix(medio * 1.5, ambar * 1.6, smoothstep(.2, .9, mm)), smoothstep(0., 14., m));
+      jpal += vec3(1., .72, .34) * pow(smoothstep(.55, 1., mm), 3.) * .5 * uJulia;
+      vec3 ic = mix(fc, jpal, .06 + .86 * uJulia);
+      ic *= smoothstep(1., .86, rr) * (.55 + .5 * smoothstep(.3, .6, rr));
+      ic *= .55 + .45 * smoothstep(0., .5, eu);
       col = ic;
-      float rp = .34 + .10 * fear;
+      float rp = mix(.32 + .08 * fear, .94, uPupil);
       if (rr < rp){
         vec2 g = q / rp;
-        vec3 gc = galaxia(g, mood);
-        gc *= smoothstep(1., .82, length(g));
-        col = mix(vec3(.004, .004, .012), vec3(.004, .004, .012) + gc, smoothstep(rp, rp * .96, rr) * 0. + 1.);
-        col = mix(col, ic, smoothstep(rp * .93, rp, rr));
+        vec3 gc = galaxia(g, mood) * smoothstep(1., .82, length(g));
+        col = mix(vec3(.004, .004, .012) + gc, ic, smoothstep(rp * .93, rp, rr));
       }
     }
-    // brillos
-    vec2 gq = q - vec2(-.42, .46);
-    float v = smoothstep(.17, .10, max(abs(gq.x) * .9, abs(gq.y) * 1.2));
-    col += vec3(.95, .97, 1.) * v * .35 * step(r, 1.);
-    col += vec3(1.) * smoothstep(.05, .0, length(q - vec2(.28, -.32))) * .22 * step(r, 1.);
+    // reflejo de la pantalla del portatil y brillo pequeno
+    vec2 gq = q - vec2(-.38, .26);
+    float v = smoothstep(.09, .04, max(abs(gq.x) * .9, abs(gq.y) * 1.3));
+    col += vec3(.75, .88, 1.) * v * .5 * step(r, 1.) * (1. - uPupil * .7);
+    col += vec3(1.) * smoothstep(.05, .0, length(q - vec2(.30, -.26))) * .18 * step(r, 1.) * (1. - uPupil);
+    // sombra del parpado sobre el ojo
+    col *= .55 + .45 * smoothstep(0., .3, eu);
   }
   float vig = 1. - .5 * pow(length((gl_FragCoord.xy - uRes * .5) / uRes), 2.) * 2.;
   col *= vig;
-  col += (hash(gl_FragCoord.xy + uT) - .5) * .02;
+  col += (hash(gl_FragCoord.xy + uT) - .5) * .018;
   o = vec4(col * uFade, 1.);
 }`;
 

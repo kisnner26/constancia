@@ -671,6 +671,8 @@ def build(name):
     hair_m = hair_m * np.clip(fg * 2.0, 0, 1)
     cl_ = cv2.morphologyEx((hair_m > 0.5).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8)).astype(np.float32)
     hair_m = np.maximum(hair_m, cv2.GaussianBlur(cl_ * (hair > 0.5), (0, 0), 2))
+    cl2 = cv2.morphologyEx((hair_m > 0.35).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((55, 55), np.uint8)).astype(np.float32)
+    hair_m = np.maximum(hair_m, cv2.GaussianBlur(cl2 * (hair > 0.3), (0, 0), 2))
     if name == "viejo":
         hair_m = np.clip(hair_m - warp.apply(rec, cv2.INTER_LINEAR), 0, 1)
     skin = np.clip(fg - hair_m - shirt, 0, 1)
@@ -806,7 +808,7 @@ def build(name):
     chroma = rgb - gray_c
     cm = (chroma * skin[..., None]).sum((0, 1)) / (skin.sum() + 1e-6)
     skin_rgb = np.clip(ramp + 0.9 * (chroma - cm) * (0.8 if name != "viejo" else 0.5), 0, 255)
-    alpha_skin = {"nino": 0.5, "muerte": 0.14, "viejo": 0.5}.get(name, 0.58)
+    alpha_skin = {"nino": 0.72, "muerte": 0.14, "viejo": 0.7}.get(name, 0.85)
     if name == "muerte":
         skin_rgb = skin_rgb * 0.3 + 255 * 0.7
     wash_img(ag, skin, skin_rgb, alpha_skin, seed + 30, amp=7, mod=fd)
@@ -834,7 +836,7 @@ def build(name):
     wash_img(ag, bm, br, 0.5 if name != "muerte" else 0.1, seed + 36, amp=2)
     # camisa
     sr = 255 - (255 - rgb) * 0.8
-    wash_img(ag, shirt, sr, 0.7 if name != "muerte" else 0.0, seed + 38, amp=6, mod=fd)
+    # la camisa solo lleva rayado: sin lavado gris
     # iris real
     if name != "muerte":
         iris_m = np.zeros((H, W), np.float32)

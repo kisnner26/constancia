@@ -7,10 +7,10 @@ animación web poética, un autorretrato para dejar constancia de lo que fue un 
 ## verlo en local
 
 ```
-python3 -m http.server 8765
+python3 -m http.server 8791
 ```
 
-y abrir http://localhost:8765. el sonido (ambiente generado, sin audio de terceros) está apagado por defecto.
+y abrir http://localhost:8791. un clic en la luciérnaga empieza todo; el sonido es ambiente generado en el navegador, sin audio de terceros.
 
 ## créditos
 
