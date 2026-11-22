@@ -1,0 +1,25 @@
+{
+  "name": "constancia",
+  "version": "1.0.0",
+  "description": "animacion web poetica y motor de animaciones",
+  "main": "desktop/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac dmg zip --arm64 --x64",
+    "build:win": "electron-builder --win zip --x64"
+  },
+  "build": {
+    "appId": "dev.constancia.player",
+    "productName": "constancia",
+    "directories": { "output": "dist" },
+    "files": ["desktop/**", "index.html", "ejemplo.html", "css/**", "js/**", "engine/**", "scenes/**", "assets/**", "package.json"],
+    "mac": { "category": "public.app-category.entertainment", "identity": null, "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }] },
+    "win": { "target": [{ "target": "zip", "arch": ["x64"] }], "signAndEditExecutable": false },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
