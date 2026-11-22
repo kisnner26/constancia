@@ -21,12 +21,13 @@ vec2 invBilinear(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d){
   vec2 e = b - a, f = d - a, g = a - b + c - d, h = p - a;
   float k2 = cross2(g, f), k1 = cross2(e, f) + cross2(h, g), k0 = cross2(h, e);
   float u, v;
-  if (abs(k2) < 1e-3){ v = -k0 / k1; }
+  if (abs(k2) < 1e-6){ v = -k0 / k1; }
   else {
     float w = k1 * k1 - 4. * k0 * k2;
     if (w < 0.) return vec2(-1.);
     w = sqrt(w);
     float v1 = (-k1 - w) / (2. * k2), v2 = (-k1 + w) / (2. * k2);
+    if (k1 > 0.) v2 = 2. * k0 / (-k1 - w); else v1 = 2. * k0 / (-k1 + w);
     v = (v1 > 0. && v1 < 1.) ? v1 : v2;
   }
   u = (h.x - f.x * v) / (e.x + g.x * v);
@@ -39,7 +40,7 @@ vec4 torre(vec2 p, float xl0, float xl1, float xr0, float xr1, float ytop, float
   float xl = mix(xl0, xl1, k), xr = mix(xr0, xr1, k);
   if (p.x < xl || p.x > xr || p.y > ytop || p.y < -.05) return vec4(0.);
   float u = (p.x - xl) / (xr - xl);
-  vec2 cell = vec2(u * 15., p.y * 70. * (1. - .4 * k));
+  vec2 cell = vec2(u * 24., p.y * 46. * (1. - .4 * k));
   vec2 id = floor(cell), fr = fract(cell);
   float lit = step(.80, hash(id + seed));
   float w = step(.2, fr.x) * step(fr.x, .75) * step(.25, fr.y) * step(fr.y, .78);
@@ -116,6 +117,8 @@ vec3 escena(vec2 uv, float asp, float t){
 }
 
 uniform float uFade;
+uniform float uZoom;
+uniform vec2 uZC;
 void main(){
   vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec3 col = vec3(.011, .008, .012);
@@ -125,7 +128,8 @@ void main(){
   vec2 uv = invBilinear(fc, uA, uB, uC, uD);
   if (uv.x >= 0.){
     float asp = length(uB - uA) / length(uD - uA);
-    vec3 s = escena(uv, asp, uT);
+    vec2 uvz = (uv - uZC) / max(uZoom, 1.) + uZC;
+    vec3 s = escena(uvz, asp, uT);
     float ed = min(min(uv.x, 1. - uv.x), min(uv.y, 1. - uv.y));
     s *= .75 + .25 * smoothstep(0., .05, ed);
     s += (hash(fc + uT) - .5) * .018;
@@ -140,6 +144,7 @@ uniform vec2 uC;        // centro del ojo (px, y hacia arriba)
 uniform float uR;       // radio del iris en px
 uniform float uMood;    // 0 frio/miedo ... 1 calido/alegria
 uniform float uFade;
+uniform float uBlink;
 const float PI = 3.14159265;
 float pn(float ang, float rad, float N){
   float x = ang / (2. * PI) * N + N, i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
@@ -178,8 +183,9 @@ void main(){
   float Wx = 3.6;
   float xx = clamp(abs(q.x) / Wx, 0., 1.);
   float arco = 1. - xx * xx;
-  float yu = .92 * pow(arco, .8) + .02;
-  float yl = -1.12 * pow(arco, .8) - .02;
+  float bl = 1. - uBlink;
+  float yu = (.92 * pow(arco, .8) + .02) * bl - .9 * uBlink * (1. - arco);
+  float yl = (-1.12 * pow(arco, .8) - .02) * bl;
   bool dentro = abs(q.x) < Wx && q.y < yu && q.y > yl;
   vec3 col;
   if (!dentro){
@@ -245,7 +251,11 @@ export const HORIZONTE = CABECERA + `
 uniform float uRise;    // 0..1 el cuerpo oscuro y el sol suben
 uniform float uSol;     // 1 vivo ... 0 apagado
 uniform float uFade;
-float yh(float x){ return -.17 + .012 * fbm(vec2(x * 3.2 + 1., 2.)) + .01 * fbm(vec2(x * 11., 5.)); }
+uniform float uDust;
+float yh(float x){
+  float giant = .085 * exp(-pow((x - .55 - .12 * sin(uT * .07)) * 2.4, 2.));
+  return -.17 + .03 * sin(x * 2.1 + uT * .22) + .014 * sin(x * 5.3 - uT * .37) + .006 * sin(x * 13. + uT * .9) + giant * (.7 + .3 * sin(uT * .15));
+}
 
 vec3 cielo(vec2 q, vec2 S, float rise){
   float h = q.y + .17;
@@ -254,6 +264,12 @@ vec3 cielo(vec2 q, vec2 S, float rise){
   float g = exp(-max(h, 0.) * 2.8);
   vec3 c = mix(zen, hor, g);
   c += vec3(.12, .06, .22) * exp(-abs(h - .18) * 6.) * rise * .5;
+  // nubes heladas: bandas finas que toman luz del sol por el borde
+  float cn = fbm(vec2(q.x * 1.8 + uT * .015, q.y * 6.5));
+  float banda = smoothstep(.04, .16, h) * (1. - smoothstep(.42, .7, h));
+  float nube = smoothstep(.48, .78, cn) * banda;
+  vec3 hielo = mix(vec3(.30, .42, .62), vec3(.95, .80, .66), exp(-length(q - S) * 2.2) * uSol);
+  c = mix(c, hielo * (.25 + .9 * rise), nube * .55);
   float d = length(q - S);
   c += vec3(1., .55, .22) * exp(-d * 6.5) * .65 * uSol;
   c += vec3(1., .82, .55) * exp(-d * 22.) * 1.1 * uSol;
@@ -265,8 +281,11 @@ vec3 cielo(vec2 q, vec2 S, float rise){
   return c;
 }
 
+uniform float uZ;
+uniform float uPan;
 void main(){
   vec2 q = (gl_FragCoord.xy - uRes * .5) / uRes.y;
+  q = (q - vec2(0., -.17)) / max(uZ, 1.) + vec2(uPan, -.17);
   float rise = uRise;
   vec2 L = vec2(.24, mix(-.30, .17, rise));
   vec2 S = L + vec2(.040, -.026);
@@ -292,23 +311,94 @@ void main(){
     // bruma sobre el horizonte
     col += vec3(.9, .45, .22) * exp(-(q.y - hor) * 16.) * (.10 + .25 * rise) * uSol;
   } else {
+    // oceano: swell enorme, brillos en la columna de luz y espuma en la cresta
     float d = hor - q.y;
-    vec3 base = vec3(.020, .014, .016) * (1. - .5 * smoothstep(0., .6, d));
-    float tex = fbm(vec2(q.x * 6., d * 50. / (d + .25)));
-    base *= .6 + .8 * tex;
-    vec3 refl = vec3(.75, .32, .12) * exp(-d * 9.) * (.15 + .5 * rise) * uSol;
-    // reflejo del sol en la llanura: columna de luz
-    float cx = exp(-pow((q.x - S.x) * 5., 2.)) * exp(-d * 3.);
-    refl += vec3(1., .6, .3) * cx * .12 * uSol * rise;
-    col = base + refl * (.5 + tex);
-    col += vec3(.5, .22, .10) * exp(-d * 40.) * .35 * uSol;
+    vec3 prof = vec3(.006, .014, .026);
+    vec3 refl = vec3(.75, .32, .12) * exp(-d * 7.) * (.18 + .55 * rise) * uSol;
+    float persp = d / (d + .22);
+    float ond = sin(q.x * 9. + uT * .9 + persp * 14.) * .5 + .5;
+    float onda2 = fbm(vec2(q.x * 7. + uT * .12, persp * 26. - uT * .5));
+    vec3 base = prof * (.6 + .9 * onda2) + refl * (.4 + onda2);
+    float col_luz = exp(-pow((q.x - S.x) * (3.4 - 2.2 * persp), 2.));
+    float glint = pow(noise(vec2(q.x * 46., persp * 120. - uT * 1.8)), 9.) * 2.6;
+    base += vec3(1., .66, .36) * glint * col_luz * (.3 + .9 * rise) * uSol * (1. - persp * .4);
+    base += vec3(.55, .6, .75) * pow(ond, 6.) * .02 * persp;
+    float cresta = exp(-d * 60.);
+    base += vec3(.85, .78, .7) * cresta * (.1 + .5 * rise) * uSol * (.4 + .6 * noise(vec2(q.x * 30., uT * .6)));
+    col = base;
+    col += vec3(.5, .22, .10) * exp(-d * 40.) * .25 * uSol;
   }
   // polvo fino en suspension
-  float dust = fbm(q * vec2(5., 8.) + vec2(uT * .03, 0.));
-  col += vec3(.6, .35, .2) * dust * .03 * (.3 + rise) * uSol;
+  float dust = fbm(q * vec2(4., 7.) + vec2(uT * .09, 0.));
+  col += vec3(.65, .38, .2) * dust * (.03 + .16 * uDust * exp(-abs(q.y + .12) * 2.5)) * (.3 + rise) * (.4 + uSol);
   col = 1. - exp(-col * 1.25);
   col = pow(col, vec3(.92));
   col *= 1. - .35 * pow(length(q * vec2(.9, 1.1)), 2.);
   col += (hash(gl_FragCoord.xy + uT) - .5) * .016;
+  o = vec4(col * uFade, 1.);
+}`;
+
+// ------------------------------------------------------------------ agujero negro con disco de acrecion lensado (geodesicas nulas de schwarzschild)
+export const AGUJERO = CABECERA + `
+uniform vec2 uCam;      // giro y cabeceo de la camara
+uniform float uDist;    // distancia
+uniform float uIgn;     // brillo del disco
+uniform float uFade;
+float estrellas(vec3 d){
+  vec2 sp = vec2(atan(d.z, d.x), asin(clamp(d.y, -1., 1.))) * vec2(70., 70.);
+  vec2 id = floor(sp);
+  float h = hash(id);
+  float s = step(.987, h) * smoothstep(.45, .0, length(fract(sp) - .5));
+  return s * (.4 + .9 * hash(id + 7.));
+}
+void main(){
+  vec2 q = (gl_FragCoord.xy - uRes * .5) / uRes.y;
+  float yaw = uCam.x, pit = uCam.y;
+  vec3 ro = uDist * vec3(cos(pit) * sin(yaw), sin(pit), -cos(pit) * cos(yaw));
+  vec3 fw = normalize(-ro);
+  vec3 rt = normalize(cross(vec3(0., 1., 0.), fw));
+  vec3 up = cross(fw, rt);
+  vec3 rd = normalize(fw * 1.5 + rt * q.x + up * q.y);
+  vec3 p = ro;
+  vec3 col = vec3(0.);
+  float opaco = 0.;
+  bool cae = false;
+  for (int i = 0; i < 190; i++){
+    float r = length(p);
+    if (r < 1.0){ cae = true; break; }
+    vec3 h = cross(p, rd);
+    float h2 = dot(h, h);
+    float dt = clamp(.045 * r, .03, .7);
+    rd += -1.5 * h2 * p / (r * r * r * r * r) * dt;
+    rd = normalize(rd);
+    vec3 np = p + rd * dt;
+    if (p.y * np.y < 0.){
+      float f = p.y / (p.y - np.y);
+      vec3 hit = mix(p, np, f);
+      float hr = length(hit.xz);
+      if (hr > 2.7 && hr < 10.){
+        float k = (hr - 2.7) / 7.3;
+        float temp = pow(1. - k, 1.7);
+        vec3 v = normalize(cross(vec3(0., 1., 0.), hit)) * sqrt(.5 / hr);
+        float dop = 1. / max(.25, 1. - dot(v, rd));
+        float beam = pow(dop, 3.2);
+        float ang = atan(hit.z, hit.x) - uT * .9 / pow(hr, 1.5) * 3.;
+        float fil = .55 + .45 * sin(ang * 4. + hr * 3.) * sin(ang * 9. - hr * 5.);
+        float gr = fbm(vec2(ang * 3., hr * 2.2));
+        vec3 c = mix(vec3(1., .30, .06), vec3(1., .86, .58), temp) * temp * beam * (fil * .6 + gr * .6) * 2.4 * uIgn;
+        col += c * (1. - opaco);
+        opaco = min(1., opaco + .55 * temp + .12);
+      }
+    }
+    p = np;
+    if (r > 40.) break;
+  }
+  if (!cae) col += vec3(.8, .85, 1.) * estrellas(rd) * (1. - opaco) * .8;
+  // brillo suave alrededor
+  float rq = length(q);
+  col += vec3(1., .5, .2) * .02 * uIgn / (rq * rq * 40. + .2);
+  col = 1. - exp(-col * 1.3);
+  col = pow(col, vec3(.95));
+  col += (hash(gl_FragCoord.xy + uT) - .5) * .014;
   o = vec4(col * uFade, 1.);
 }`;
