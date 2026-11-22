@@ -60,7 +60,7 @@ carga `index.html?escena=<nombre>`; pantalla completa con f11 o ctrl/cmd+f, esc 
 
 ```
 npm install
-npm start                          # prueba local (escena por defecto: constancia)
+npm start                          # prueba local (si npm bloquea el postinstall de electron: node node_modules/electron/install.js) (escena por defecto: constancia)
 npm start -- --escena=ejemplo
 npm run build:mac                  # en macos: dist/*.dmg y *.zip (arm64 y x64), sin firmar
 npm run build:win                  # zip portable x64 (se puede generar desde macos, sin wine)
