@@ -1,45 +1,15 @@
-:root {
-  --papel: #e9dcc0;
-  --tinta: #3b2312;
-  --noche: #070504;
-  --serif: 'Cormorant Garamond', 'EB Garamond', Garamond, 'Iowan Old Style', Georgia, serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-}
+:root { --noche: #0a0705; --papel: #e9dcc0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--noche); overflow: hidden; }
-body { color: var(--papel); font-family: var(--serif); -webkit-font-smoothing: antialiased; touch-action: manipulation; user-select: none; -webkit-user-select: none; cursor: default; }
+body { touch-action: manipulation; user-select: none; -webkit-user-select: none; cursor: pointer; }
+body.activo { cursor: default; }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #gl { z-index: 0; opacity: 0; }
 #c2 { z-index: 1; }
-#velo { position: fixed; inset: 0; z-index: 2; background: var(--noche); opacity: 0; pointer-events: none; }
-
-#texto { position: fixed; inset: 0; z-index: 3; pointer-events: none; color: var(--papel); }
-.cue { position: absolute; left: 0; right: 0; padding: 0 max(24px, 6vw); text-align: center; visibility: hidden; }
-.cue.pie-frase { bottom: max(9vh, 56px); }
-.cue.centro { top: 42%; transform: translateY(-50%); }
-.cue.centro-bajo { top: 38%; }
-.cue.pie { bottom: max(7vh, 44px); }
-.cue p { opacity: 0; }
-.frase { font-size: clamp(20px, 3.1vw, 38px); font-weight: 300; font-style: italic; line-height: 1.3; letter-spacing: 0.01em; max-width: 30ch; margin: 0 auto 0.45em; text-wrap: balance; text-shadow: 0 0 24px rgba(0, 0, 0, 0.35); }
-.titulo { font-size: clamp(40px, 9vw, 120px); font-weight: 300; letter-spacing: 0.14em; text-indent: 0.14em; line-height: 1; }
-.sub { font-family: var(--mono); font-size: clamp(10px, 1.15vw, 13px); letter-spacing: 0.22em; text-transform: lowercase; margin-top: 1.6em; opacity: 0.8; }
-
-#meta { position: fixed; z-index: 4; top: max(18px, env(safe-area-inset-top)); left: max(20px, 4vw); font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: rgba(233, 220, 192, 0.5); pointer-events: none; }
-
-#puntos { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 6px; }
-#puntos button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; width: clamp(18px, 3.4vw, 34px); height: 22px; display: flex; align-items: center; }
-#puntos button::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(233, 220, 192, 0.25); }
-#puntos button i { position: relative; z-index: 1; display: block; width: 100%; height: 2px; background: rgba(233, 220, 192, 0.85); transform-origin: left; transform: scaleX(0); }
-#puntos button:focus-visible { outline: 1px solid rgba(233, 220, 192, 0.8); outline-offset: 2px; }
-#puntos.sobre-papel button i { background: rgba(59, 35, 18, 0.85); }
-#puntos.sobre-papel button::before { background: rgba(59, 35, 18, 0.25); }
-
-#ctl { position: fixed; z-index: 4; right: max(18px, 3vw); bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 18px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; }
-#ctl button { all: unset; cursor: pointer; color: rgba(233, 220, 192, 0.5); padding: 6px 0; border-bottom: 1px solid transparent; }
-#ctl button:hover, #ctl button:focus-visible { color: rgba(233, 220, 192, 0.95); border-bottom-color: rgba(233, 220, 192, 0.5); }
-
-@media (max-width: 640px) {
-  #ctl { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(max(18px, env(safe-area-inset-bottom)) + 26px); gap: 22px; }
-  .cue.pie-frase { bottom: calc(max(9vh, 56px) + 18px); }
-  .frase { max-width: 22ch; }
-}
+#snd { all: unset; position: fixed; z-index: 4; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 40px; height: 40px; display: grid; place-items: center; color: rgba(233, 220, 192, 0.5); cursor: pointer; transition: color 0.3s; }
+#snd[hidden] { display: none; }
+#snd:hover, #snd:focus-visible { color: rgba(233, 220, 192, 0.95); }
+#snd:focus-visible { outline: 1px solid rgba(233, 220, 192, 0.6); outline-offset: 2px; border-radius: 2px; }
+#snd .off { display: none; }
+#snd[aria-pressed="false"] .on { display: none; }
+#snd[aria-pressed="false"] .off { display: inline; }
