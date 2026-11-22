@@ -1,11 +1,11 @@
-# motor de animación
+# fanal: api del motor
 
 motor web para animaciones largas hechas con canvas 2d y webgl2: una sola toma continua con cámara, transiciones por forma o luz, dibujo a trazos, personajes por partes y sonido sintetizado. módulos es nativos, sin build, sin dependencias. la animación `constancia` (`scenes/constancia.js`) está hecha solo con esta api.
 
 ## cómo crear una animación nueva
 
 1. crea `scenes/mi-escena.js` que exporte por defecto una escena (ver el ejemplo).
-2. ábrela con `index.html?escena=mi-escena` (o copia `ejemplo.html`).
+2. ábrela con `teaser.html?escena=mi-escena` (o copia `ejemplo.html`).
 3. cada toma (`shot`) tiene `dur` en segundos, una `camera` opcional con keyframes y una función `draw(S, env)` que dibuja el instante `S.local`. todo se calcula en función del tiempo: se puede saltar a cualquier punto (flechas) y siempre se ve igual.
 4. el primer clic arranca (el navegador exige un gesto para el audio). la escena hace bucle.
 
@@ -56,7 +56,7 @@ abre http://localhost:8791 (o `ejemplo.html`). los módulos es no cargan desde `
 
 ### reproductor de escritorio (electron)
 
-carga `index.html?escena=<nombre>`; pantalla completa con f11 o ctrl/cmd+f, esc sale de pantalla completa (y, ya en ventana, cierra).
+carga `teaser.html?escena=<nombre>`; pantalla completa con f11 o ctrl/cmd+f, esc sale de pantalla completa (y, ya en ventana, cierra).
 
 ```
 npm install
