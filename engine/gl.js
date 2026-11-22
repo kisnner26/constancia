@@ -3,7 +3,8 @@ const VERT = `#version 300 es
 in vec2 p;
 void main(){ gl_Position = vec4(p, 0., 1.); }`;
 
-export function crearGL(canvas) {
+/** crea un contexto webgl2 con un triangulo a pantalla completa. register(nombre, frag), draw(nombre, uniforms), resize(w,h) */
+export function createGL(canvas) {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, powerPreference: 'high-performance' });
   if (!gl) return null;
   const buf = gl.createBuffer();
@@ -22,7 +23,7 @@ export function crearGL(canvas) {
     return s;
   }
 
-  function programa(nombre, frag) {
+  function register(nombre, frag) {
     const vs = compilar(gl.VERTEX_SHADER, VERT);
     const fs = compilar(gl.FRAGMENT_SHADER, frag);
     if (!vs || !fs) return;
@@ -38,7 +39,7 @@ export function crearGL(canvas) {
     progs[nombre] = { pr, loc: {} };
   }
 
-  function dibujar(nombre, uniformes) {
+  function draw(nombre, uniformes) {
     const o = progs[nombre];
     if (!o) return;
     gl.useProgram(o.pr);
@@ -57,7 +58,7 @@ export function crearGL(canvas) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  function tam(w, h) {
+  function resize(w, h) {
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
@@ -65,5 +66,5 @@ export function crearGL(canvas) {
     gl.viewport(0, 0, w, h);
   }
 
-  return { gl, programa, dibujar, tam };
+  return { gl, register, draw, resize };
 }
