@@ -7,19 +7,20 @@ salida por edad en assets/retratos/:
   <edad>.png          poster 1200px (papel + aguada + rayado)
   <edad>-aguada.webp  capa de color translucida (rgba, se compone con multiply)
 
-uso: python3 tools/retratos.py [nino adolescente adulto viejo muerte]
+uso: python3 tools/retratos.py [nino adolescente adulto viejo muerte]   (windows: py -3 tools\retratos.py ...)
 las fotos de origen viven en _privado/ref/ y no se publican.
 """
 import sys, json, os
+from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
 
 W, H = 1200, 1500
 TAU = 2 * np.pi
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REF = os.path.join(ROOT, "_privado", "ref")
-OUT = os.path.join(ROOT, "assets", "retratos")
+ROOT = Path(__file__).resolve().parent.parent
+REF = ROOT / "_privado" / "ref"
+OUT = ROOT / "assets" / "retratos"
 MAXSTROKES = 8000
 INK = np.array([0x1f, 0x3a, 0x6b], np.float32)       # bgr de #6b3a1f
 INK_DARK = np.array([0x12, 0x25, 0x4d], np.float32)  # contornos
@@ -27,6 +28,11 @@ PAPER = np.array([196, 224, 236], np.float32)         # bgr crema
 
 
 # ---------------------------------------------------------------- utilidades
+def leer_bgr(ruta):
+    """lee una imagen en bgr aunque la ruta tenga acentos (cv2.imread falla con ellos en windows)"""
+    return cv2.imdecode(np.fromfile(str(ruta), np.uint8), cv2.IMREAD_COLOR)
+
+
 def snoise(shape, sigma, seed):
     r = np.random.default_rng(seed).standard_normal(shape).astype(np.float32)
     r = cv2.GaussianBlur(r, (0, 0), sigma)
@@ -401,26 +407,26 @@ def quantize_export(strokes, path):
         for a, b in zip(dedup[:-1], dedup[1:]):
             row += [b[0] - a[0], b[1] - a[1]]
         rows.append(row)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump({"w": W, "h": H, "s": rows}, f, separators=(",", ":"))
     return len(rows)
 
 
 def finalize(name, items, ag):
-    os.makedirs(OUT, exist_ok=True)
-    n = quantize_export(items, os.path.join(OUT, name + ".json"))
+    OUT.mkdir(parents=True, exist_ok=True)
+    n = quantize_export(items, OUT / (name + ".json"))
     covs = raster_ink(items)
     pap = paper(11 + len(name))
     img = compose(pap, ag, covs)
-    Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).save(os.path.join(OUT, name + ".png"), optimize=True)
+    Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).save(OUT / (name + ".png"), optimize=True)
     out = np.dstack([np.clip(ag[..., :3], 0, 255).astype(np.uint8), (np.clip(ag[..., 3], 0, 1) * 255).astype(np.uint8)])
-    Image.fromarray(out).resize((900, 1125), Image.LANCZOS).save(os.path.join(OUT, name + "-aguada.webp"), quality=78, method=6)
+    Image.fromarray(out).resize((900, 1125), Image.LANCZOS).save(OUT / (name + "-aguada.webp"), quality=78, method=6)
     print("   ok", n, "trazos", flush=True)
 
 
 # ---------------------------------------------------------------- sujeto: 6.jpg (tres cuartos, buena luz)
 def load6(angle=-8.0):
-    im = cv2.imread(os.path.join(REF, "6.jpg"))
+    im = leer_bgr(REF / "6.jpg")
     c = (517, 280)
     M = cv2.getRotationMatrix2D(c, angle, 1.45)
     M[0, 2] += 600 - c[0]
@@ -611,7 +617,7 @@ def build(name):
     print("::", name, flush=True)
     seed = sum(map(ord, name)) * 7 + 17
     rng = np.random.default_rng(seed)
-    im = cv2.imread(os.path.join(REF, "6.jpg"))
+    im = leer_bgr(REF / "6.jpg")
     base = cv2.warpAffine(im, M6, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
     outside = 1.0 - cv2.warpAffine(np.ones(im.shape[:2], np.float32), M6, (W, H), flags=cv2.INTER_LINEAR,
                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -844,7 +850,7 @@ def build(name):
             c = warp_pt(warp, mp(M, [e["iris"]])[0])
             cv2.circle(iris_m, (int(c[0]), int(c[1])), int(e["r"] * S6 * (1.25 if name == "nino" else 1.0)), 1.0, -1)
         iris_m = cv2.GaussianBlur(iris_m * (skin > 0.3), (0, 0), 1.2)
-        wash_img(ag, iris_m, np.clip(rgb * 0.6, 0, 255), 0.4, seed + 37, amp=1.0)
+        wash_img(ag, iris_m, np.full_like(rgb, 24.0) * np.array([1.0, 0.72, 0.6], np.float32), 0.88, seed + 37, amp=1.0)
     finalize(name, items, ag)
 
 
